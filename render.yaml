@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: sellerchamp-returns
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: SELLERCHAMP_API_TOKEN
+        sync: false
+      - key: APP_PIN
+        sync: false
+      - key: RETURN_APP_BASE_URL
+        sync: false
+      - key: SC_SHIP_FROM_ADDRESS_ID
+        sync: false
+      - key: SC_EBAY_TEMPLATE_ID
+        sync: false
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: returns-data
+      mountPath: /var/data
+      sizeGB: 1
