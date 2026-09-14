@@ -17,7 +17,6 @@ if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '[]');
 
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(UPLOAD_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const readDb = () => { try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8') || '[]'); } catch { return []; } };
@@ -25,6 +24,31 @@ const writeDb = rows => { const tmp = DB_FILE + '.tmp'; fs.writeFileSync(tmp, JS
 const now = () => new Date().toISOString();
 const digits = s => String(s || '').replace(/\D/g, '');
 const formatOrder = s => { const d = digits(s); return d.length === 12 ? `${d.slice(0,2)}-${d.slice(2,7)}-${d.slice(7,12)}` : String(s || '').trim(); };
+const AUTH_COOKIE = 'sc_returns_auth';
+const AUTH_MAX_AGE = 30 * 24 * 60 * 60; // 30 days on this browser/device
+function parseCookies(req){
+  const out={}; String(req.headers.cookie||'').split(';').forEach(part=>{ const i=part.indexOf('='); if(i>0) out[decodeURIComponent(part.slice(0,i).trim())]=decodeURIComponent(part.slice(i+1).trim()); }); return out;
+}
+function authSecret(){ return process.env.APP_PIN || ''; }
+function makeAuthToken(){
+  const exp=Math.floor(Date.now()/1000)+AUTH_MAX_AGE;
+  const payload=String(exp);
+  const sig=crypto.createHmac('sha256',authSecret()).update(payload).digest('hex');
+  return `${payload}.${sig}`;
+}
+function authValid(req){
+  if(!process.env.APP_PIN) return true;
+  const tok=parseCookies(req)[AUTH_COOKIE]||'';
+  const [exp,sig]=tok.split('.');
+  if(!exp||!sig||Number(exp)<Math.floor(Date.now()/1000)) return false;
+  const expected=crypto.createHmac('sha256',authSecret()).update(exp).digest('hex');
+  try{return crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected));}catch{return false;}
+}
+function requirePin(req,res,next){ if(authValid(req)) return next(); return res.status(401).json({error:'PIN required.',pin_required:true}); }
+function photoSignature(returnId,index,filename){
+  const secret=process.env.SELLERCHAMP_API_TOKEN || authSecret() || 'returns-photo';
+  return crypto.createHmac('sha256',secret).update(`${returnId}|${index}|${filename}`).digest('hex');
+}
 function token(){ const t = process.env.SELLERCHAMP_API_TOKEN; if(!t) throw new Error('SELLERCHAMP_API_TOKEN is not configured.'); return t; }
 async function sc(endpoint, options={}){
   const res = await fetch(SC_BASE + endpoint, { ...options, headers: { Token: token(), 'Content-Type':'application/json', ...(options.headers||{}) } });
@@ -36,8 +60,25 @@ const first = (o,...keys) => { for(const k of keys) if(o && o[k] !== undefined &
 const ebayUrl = p => { const id = first(p,'marketplace_id','ebay_item_id'); return id ? `https://www.ebay.com/itm/${encodeURIComponent(id)}` : (p?.marketplace_url || ''); };
 const sellerChampUrl = p => p?.id ? `https://app.sellerchamp.com/products/${p.id}` : 'https://app.sellerchamp.com';
 
-app.get('/api/config', (req,res)=>res.json({pinRequired:!!process.env.APP_PIN, duplicateReady:!!(process.env.SC_SHIP_FROM_ADDRESS_ID && process.env.SC_EBAY_TEMPLATE_ID && process.env.RETURN_APP_BASE_URL)}));
-app.post('/api/pin', (req,res)=>res.json({ok:!process.env.APP_PIN || String(req.body.pin||'') === process.env.APP_PIN}));
+app.get('/api/config', (req,res)=>res.json({pinRequired:!!process.env.APP_PIN, authenticated:authValid(req), duplicateReady:!!(process.env.SC_SHIP_FROM_ADDRESS_ID && process.env.SC_EBAY_TEMPLATE_ID && process.env.RETURN_APP_BASE_URL)}));
+app.post('/api/pin', (req,res)=>{
+  const ok=!process.env.APP_PIN || String(req.body.pin||'') === process.env.APP_PIN;
+  if(ok && process.env.APP_PIN){
+    res.setHeader('Set-Cookie',`${AUTH_COOKIE}=${encodeURIComponent(makeAuthToken())}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_MAX_AGE}; Secure`);
+  }
+  res.json({ok});
+});
+app.get('/listing-photo/:returnId/:index', (req,res)=>{
+  const r=readDb().find(x=>x.id===req.params.returnId); const i=Number(req.params.index);
+  if(!r || !Number.isInteger(i) || i<0 || i>=r.photos.length) return res.status(404).send('Not found');
+  const filename=path.basename(r.photos[i]); const expected=photoSignature(r.id,i,filename);
+  const sig=String(req.query.sig||'');
+  try{ if(!sig || !crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected))) return res.status(403).send('Forbidden'); }catch{return res.status(403).send('Forbidden');}
+  const file=path.join(UPLOAD_DIR,filename); if(!fs.existsSync(file)) return res.status(404).send('Not found');
+  res.sendFile(file);
+});
+app.use('/api', requirePin);
+app.use('/uploads', requirePin, express.static(UPLOAD_DIR));
 
 app.get('/api/order/:orderNumber', async (req,res) => {
   try {
@@ -88,7 +129,7 @@ app.post('/api/returns', upload.array('photos',6), (req,res)=>{
 });
 
 app.get('/api/returns', (req,res)=>{
-  const rows = readDb().filter(r=>req.query.all==='1' || r.status!=='completed');
+  const rows = readDb().filter(r=>req.query.all==='1' || !['completed','archived'].includes(r.status));
   rows.sort((a,b)=>(a.location||'').localeCompare(b.location||'',undefined,{numeric:true,sensitivity:'base'}) || a.created_at.localeCompare(b.created_at));
   res.json({returns:rows});
 });
@@ -123,16 +164,63 @@ async function getProductAndInventory(r){
 }
 app.get('/api/returns/:id/inventory', async(req,res)=>{ try{ const r=readDb().find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'}); res.json(await getProductAndInventory(r)); }catch(e){res.status(500).json({error:e.message});} });
 
+function archiveRecord(r, action, details){
+  r.status='archived'; r.archived_at=now(); r.updated_at=now();
+  r.history.push({at:now(),action,details});
+}
+async function freshProduct(productId){
+  const j=await sc(`/api/products/${productId}`); return j.product||j;
+}
 async function addAtLocation(product, inv, loc, qty){
   const row = inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
   if(row) return sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:Number(row.quantity_available||0)+qty,delete_if_empty:row.delete_if_empty!==false,priority:row.priority||1}})});
   return sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
 }
 app.post('/api/returns/:id/add-inventory', async(req,res)=>{
-  try{ const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'}); const r=db[idx], qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location; await addAtLocation(product,inv,loc,qty); r.status='completed'; r.updated_at=now(); r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}`}); writeDb(db); res.json({ok:true}); }catch(e){res.status(500).json({error:e.message});}
+  try{
+    const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
+    const r=db[idx];
+    if(r.status==='inventory_added_pending_listing'){
+      const {product}=await getProductAndInventory(r);
+      return res.json({ok:true,already_added:true,marketplace_status:String(product.marketplace_status||'unknown').toLowerCase(),product_id:product.id});
+    }
+    if(['completed','archived'].includes(r.status)) return res.status(409).json({error:'This return has already been processed.'});
+    const qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
+    await addAtLocation(product,inv,loc,qty);
+    const refreshed=await freshProduct(product.id);
+    const marketplaceStatus=String(refreshed.marketplace_status||product.marketplace_status||'unknown').toLowerCase();
+    r.inventory_result={at:now(),qty,location:loc,product_id:product.id,marketplace_status:marketplaceStatus};
+    r.updated_at=now();
+    r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}`});
+    if(marketplaceStatus==='active'){
+      archiveRecord(r,'archived','Inventory returned; eBay listing already active.');
+    }else{
+      r.status='inventory_added_pending_listing';
+    }
+    writeDb(db);
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:r.status==='archived',product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||''});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
+  try{
+    const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
+    const r=db[idx]; if(r.status!=='inventory_added_pending_listing') return res.status(409).json({error:'Inventory must be added before relisting.'});
+    const {product}=await getProductAndInventory(r);
+    await sc(`/api/products/${product.id}?relist=true`,{method:'PUT',body:JSON.stringify({product:{}})});
+    let refreshed=null; try{refreshed=await freshProduct(product.id)}catch{}
+    archiveRecord(r,'relisted_and_archived',`Relist requested for ${r.sku}. Marketplace status after request: ${refreshed?.marketplace_status||'pending'}`);
+    writeDb(db); res.json({ok:true,marketplace_status:refreshed?.marketplace_status||'pending'});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+app.post('/api/returns/:id/archive-inactive', (req,res)=>{
+  try{
+    const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
+    const r=db[idx]; if(r.status!=='inventory_added_pending_listing') return res.status(409).json({error:'This return is not waiting for an eBay listing decision.'});
+    archiveRecord(r,'archived_inactive','Inventory returned; eBay listing intentionally left inactive.'); writeDb(db); res.json({ok:true});
+  }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/add-reserve', async(req,res)=>{
-  try{ const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'}); const r=db[idx], qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location; await addAtLocation(product,inv,loc,qty); await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:Number(product.reserve_quantity||0)+qty,reserve_quantity_location:req.body.reserve_location||loc}})}); r.status='completed'; r.updated_at=now(); r.history.push({at:now(),action:'inventory_reserved',details:`Added ${qty} and increased reserve by ${qty}`}); writeDb(db); res.json({ok:true}); }catch(e){res.status(500).json({error:e.message});}
+  try{ const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'}); const r=db[idx], qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location; await addAtLocation(product,inv,loc,qty); await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:Number(product.reserve_quantity||0)+qty,reserve_quantity_location:req.body.reserve_location||loc}})}); archiveRecord(r,'inventory_reserved',`Added ${qty} and increased reserve by ${qty}`); writeDb(db); res.json({ok:true,archived:true}); }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/duplicate', async(req,res)=>{
   try{
@@ -140,10 +228,10 @@ app.post('/api/returns/:id/duplicate', async(req,res)=>{
     const ship=process.env.SC_SHIP_FROM_ADDRESS_ID, template=process.env.SC_EBAY_TEMPLATE_ID, base=String(process.env.RETURN_APP_BASE_URL||'').replace(/\/$/,'');
     if(!ship||!template||!base) throw new Error('Duplicate listing setup is incomplete. Configure SC_SHIP_FROM_ADDRESS_ID, SC_EBAY_TEMPLATE_ID, and RETURN_APP_BASE_URL in Render.');
     const newSku=String(req.body.sku||'').trim(); if(!newSku) throw new Error('New SKU is required.');
-    const attrs={sku:newSku,title:req.body.title||product.title,quantity:Number(req.body.qty||r.returned_qty||1),item_condition:req.body.item_condition||'good',item_remarks:req.body.item_remarks||r.notes||product.item_remarks||'',retail_price:Number(req.body.retail_price||product.retail_price||0),item_location:req.body.location||r.location,description:product.description||'',brand:product.brand||'',mpn:product.mpn||'',upc:product.upc||'',item_category:product.item_category||'',item_category_id:product.item_category_id||'',listing_format:product.listing_format||'fixed_price',listing_duration:product.listing_duration||'gtc',weight_in_pounds:product.weight_in_pounds||0,package_dimensions_length:product.package_dimensions_length||0,package_dimensions_width:product.package_dimensions_width||0,package_dimensions_height:product.package_dimensions_height||0,image_urls:r.photos.map(p=>base+p)};
+    const attrs={sku:newSku,title:req.body.title||product.title,quantity:Number(req.body.qty||r.returned_qty||1),item_condition:req.body.item_condition||'good',item_remarks:req.body.item_remarks||r.notes||product.item_remarks||'',retail_price:Number(req.body.retail_price||product.retail_price||0),item_location:req.body.location||r.location,description:product.description||'',brand:product.brand||'',mpn:product.mpn||'',upc:product.upc||'',item_category:product.item_category||'',item_category_id:product.item_category_id||'',listing_format:product.listing_format||'fixed_price',listing_duration:product.listing_duration||'gtc',weight_in_pounds:product.weight_in_pounds||0,package_dimensions_length:product.package_dimensions_length||0,package_dimensions_width:product.package_dimensions_width||0,package_dimensions_height:product.package_dimensions_height||0,image_urls:r.photos.map((p,i)=>`${base}/listing-photo/${encodeURIComponent(r.id)}/${i}?sig=${photoSignature(r.id,i,path.basename(p))}`)};
     const payload={manifest:{name:`Return ${r.order_number} ${newSku}`,marketplace_account_id:r.marketplace_account_id,ship_from_address_id:ship,template_id:template,auto_submit:true,product_listings_attributes:[attrs]}};
     const created=await sc('/api/manifests',{method:'POST',body:JSON.stringify(payload)});
-    r.status='completed'; r.updated_at=now(); r.history.push({at:now(),action:'duplicated',details:`Created new listing SKU ${newSku}`}); r.duplicate_result=created; writeDb(db); res.json({ok:true,result:created});
+    r.duplicate_result=created; archiveRecord(r,'duplicated',`Created new listing SKU ${newSku}`); writeDb(db); res.json({ok:true,archived:true,result:created});
   }catch(e){res.status(500).json({error:e.message});}
 });
 
