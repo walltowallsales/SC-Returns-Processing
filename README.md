@@ -75,3 +75,8 @@ The 60-day cleanup is manual only; records are not automatically deleted.
 - Deletion requires the dedicated PIN `8880`.
 - A confirmation is required after the PIN.
 - Deleting permanently removes the active return record and its stored return photos.
+
+
+## V2.2
+- Fixed a PDF title-sizing bug that caused the body text to render invisibly after the V2 title change.
+- Preserves all V2 PDF formatting requests and the V2.1 Process Returns delete button/PIN.

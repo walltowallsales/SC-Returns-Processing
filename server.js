@@ -182,7 +182,11 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   const doc = new PDFDocument({size:'LETTER',margin:36}); doc.pipe(res);
   doc.font('Helvetica-Bold');
   let titleSize=40;
-  while(titleSize>10 && doc.widthOfString('RETURN PROCESSING SHEET',{font:'Helvetica-Bold',size:titleSize}) > 540) titleSize--;
+  while(titleSize>10){
+    doc.fontSize(titleSize);
+    if(doc.widthOfString('RETURN PROCESSING SHEET') <= 540) break;
+    titleSize--;
+  }
   doc.fontSize(titleSize).text('RETURN PROCESSING SHEET',{align:'center',lineBreak:false}).moveDown(.6);
   doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Observed Condition:',r.observed_condition);
   doc.moveDown(.6);
