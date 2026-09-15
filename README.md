@@ -93,3 +93,11 @@ The 60-day cleanup is manual only; records are not automatically deleted.
 - Process Returns queue placard now shows `Order: <order number>` before the SKU.
 - Option 1 now checks and displays the current eBay marketplace status as soon as a return is opened.
 - If the listing is not active, the existing post-inventory workflow presents the option to activate/relist it before archiving.
+
+
+## V2-5
+- Prevents an Order ID from being processed more than once, including when its prior return is archived.
+- The duplicate check occurs both before SellerChamp order lookup and again server-side when saving the return.
+- If the existing return is permanently deleted, that Order ID becomes eligible again.
+- Removed the dedicated 8880 delete PIN from Process Returns.
+- Delete now uses a clear permanent-delete confirmation to protect against accidental taps.

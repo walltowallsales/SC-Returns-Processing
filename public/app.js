@@ -23,7 +23,20 @@ $('#speakOrder').onclick=()=>{
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='back')loadQueue();if(b.dataset.tab==='archived')loadArchive()});
 (async()=>{try{const c=await api('/api/config');if(c.pinRequired&&!c.authenticated)$('#pinGate').classList.remove('hidden')}catch(e){$('#pinGate').classList.remove('hidden')}})();
 $('#pinForm').onsubmit=async e=>{e.preventDefault();const j=await api('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:$('#pin').value})});if(j.ok){$('#pinError').textContent='';$('#pinGate').classList.add('hidden')}else $('#pinError').textContent='Incorrect PIN'};
-$('#findOrder').onclick=async()=>{try{$('#orderError').textContent='';$('#orderResults').innerHTML='<div class="card">Loading…</div>';const j=await api('/api/order/'+encodeURIComponent($('#orderInput').value));currentOrder=j.order;renderOrder(j.order)}catch(e){$('#orderResults').innerHTML='';$('#orderError').textContent=e.message}};
+$('#findOrder').onclick=async()=>{
+  try{
+    $('#orderError').textContent=''; $('#orderResults').innerHTML='<div class="card">Checking…</div>';
+    const order=formatOrder($('#orderInput').value);
+    const chk=await api('/api/returns/check-order/'+encodeURIComponent(order));
+    if(chk.exists){
+      const r=chk.record||{};
+      $('#orderResults').innerHTML=`<div class="card error"><h2>RETURN ALREADY PROCESSED</h2><div><b>Order:</b> ${esc(order)}</div><div><b>Status:</b> ${esc(r.status)}</div><div><b>SKU:</b> ${esc(r.sku||'')}</div><div><b>Location:</b> ${esc(r.location||'')}</div><p>This order cannot be processed again unless its existing return record is deleted.</p></div>`;
+      return;
+    }
+    $('#orderResults').innerHTML='<div class="card">Loading SellerChamp order…</div>';
+    const j=await api('/api/order/'+encodeURIComponent(order)); currentOrder=j.order; renderOrder(j.order);
+  }catch(e){$('#orderResults').innerHTML='';$('#orderError').textContent=e.message}
+};
 function cond(p){return p?.ebay_item_condition_id??p?.item_condition??''}
 function renderOrder(o){$('#orderResults').innerHTML=(o.items||[]).map((it,i)=>`<div class="card"><h2>${esc(it.title)}</h2><div class="meta"><div><b>Order:</b> ${esc(o.order_number)}</div><div><b>SKU:</b> ${esc(it.sku)}</div><div><b>Qty Ordered:</b> ${esc(it.quantity)}</div><div><b>Condition:</b> ${esc(cond(it.product))}</div></div><div class="links">${it.sellerchamp_url?`<a target="_blank" href="${esc(it.sellerchamp_url)}">View in SellerChamp</a>`:''}${it.ebay_url?`<a target="_blank" href="${esc(it.ebay_url)}">View on eBay</a>`:''}</div><form class="intakeForm" data-i="${i}"><label>Quantity Returned</label><input name="returned_qty" inputmode="numeric" type="number" min="1" value="1"><label>What do you physically observe?</label><input name="observed_condition" placeholder="Example: Opened, appears unused"><label>Photos (up to 6)</label><input name="photos" type="file" accept="image/*" capture="environment" multiple><label>What should be done with it?</label><div class="choices"><label class="choice"><input type="radio" name="disposition" value="return_inventory" checked><div><span>Return to normal inventory</span><div class="hint">Same condition as existing stock.</div></div></label><label class="choice"><input type="radio" name="disposition" value="reserve_inventory"><div><span>Return to inventory + reserve</span><div class="hint">Keep it in stock but unavailable until released later.</div></div></label><label class="choice"><input type="radio" name="disposition" value="duplicate_product"><div><span>Create a separate product/listing</span><div class="hint">Substantially different condition.</div></div></label></div><label>Instructions / Notes</label><textarea name="notes" placeholder="Describe what you found and what should be done."></textarea><button type="submit">Save Return & Create Printable PDF</button><p class="msg"></p></form><div class="location">LOCATION: ${esc(it.location||'NO LOCATION')}</div></div>`).join('');$$('.intakeForm').forEach(f=>f.onsubmit=saveReturn)}
 async function saveReturn(e){e.preventDefault();const f=e.currentTarget,it=currentOrder.items[Number(f.dataset.i)],fd=new FormData(f);if([...fd.getAll('photos')].filter(x=>x?.size).length>6){f.querySelector('.msg').textContent='Maximum 6 photos.';return}Object.entries({order_number:currentOrder.order_number,order_id:currentOrder.id,marketplace_account_id:currentOrder.marketplace_account_id,marketplace:currentOrder.marketplace,order_item_id:it.order_item_id,sku:it.sku,title:it.title,product_id:it.product?.id||it.product_id||'',marketplace_id:it.product?.marketplace_id||'',original_condition:cond(it.product),item_remarks:it.product?.item_remarks||'',location:it.location||'',sellerchamp_url:it.sellerchamp_url||'',ebay_url:it.ebay_url||''}).forEach(([k,v])=>fd.append(k,v));try{f.querySelector('.msg').textContent='Saving…';const j=await api('/api/returns',{method:'POST',body:fd});f.querySelector('.msg').innerHTML=`<span class="success">Saved.</span><a class="pdf-button" target="_blank" href="${j.pdf_url}">Open / Print PDF</a>`}catch(err){f.querySelector('.msg').textContent=err.message}}
@@ -67,12 +80,9 @@ $('#refreshQueue').onclick=loadQueue;
 async function loadQueue(){try{const j=await api('/api/returns');$('#queue').innerHTML=j.returns.length?j.returns.map(r=>`<div class="queue-row"><strong>${esc(r.location||'NO LOC')}</strong><div><b>Order: ${esc(r.order_number)}</b><br><b>${esc(r.sku)}</b><br>${esc(r.title)}<br><span class="badge">${esc(r.disposition)}</span></div><div class="row"><button onclick="showReturn('${r.id}')">Open</button><button class="danger" onclick="deleteReturn('${r.id}','${esc(r.sku)}')">Delete</button></div></div>`).join(''):'<p>No returns waiting.</p>'}catch(e){$('#queue').innerHTML=`<p class="error">${esc(e.message)}</p>`}}
 
 window.deleteReturn=async(id,sku)=>{
-  const pin=prompt(`Enter delete PIN to permanently delete return ${sku||''}:`);
-  if(pin===null)return;
-  if(pin!=='8880'){alert('Incorrect delete PIN.');return;}
-  if(!confirm('Permanently delete this return record and its stored photos? This cannot be undone.'))return;
+  if(!confirm(`Delete return ${sku||''}?\n\nThis permanently deletes the return record and its stored photos. This cannot be undone.\n\nPress OK only if you intended to delete this record.`))return;
   try{
-    await api(`/api/returns/${id}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+    await api(`/api/returns/${id}/delete`,{method:'DELETE'});
     $('#detail').innerHTML='';
     await loadQueue();
   }catch(e){alert(e.message)}

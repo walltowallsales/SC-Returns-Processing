@@ -128,18 +128,31 @@ const upload = multer({storage, limits:{files:6,fileSize:12*1024*1024}, fileFilt
 
 app.post('/api/returns', upload.array('photos',6), (req,res)=>{
   try {
+    const incomingOrder=formatOrder(req.body.order_number);
+    const db=readDb();
+    const duplicate=db.find(r=>formatOrder(r.order_number)===incomingOrder);
+    if(duplicate){
+      for(const f of (req.files||[])){try{if(fs.existsSync(f.path))fs.unlinkSync(f.path)}catch{}}
+      return res.status(409).json({error:`RETURN ALREADY PROCESSED — Order ${incomingOrder} already exists (${duplicate.status}).`,duplicate:{id:duplicate.id,status:duplicate.status,sku:duplicate.sku,location:duplicate.location,created_at:duplicate.created_at,archived_at:duplicate.archived_at||''}});
+    }
     const record = {
       id:crypto.randomUUID(), created_at:now(), updated_at:now(), status:'awaiting_processing',
-      order_number:formatOrder(req.body.order_number), order_id:req.body.order_id||'', marketplace_account_id:req.body.marketplace_account_id||'', marketplace:req.body.marketplace||'',
+      order_number:incomingOrder, order_id:req.body.order_id||'', marketplace_account_id:req.body.marketplace_account_id||'', marketplace:req.body.marketplace||'',
       order_item_id:req.body.order_item_id||'', sku:req.body.sku||'', title:req.body.title||'', product_id:req.body.product_id||'', marketplace_id:req.body.marketplace_id||'',
       original_condition:req.body.original_condition||'', item_remarks:req.body.item_remarks||'', returned_qty:Number(req.body.returned_qty||1), location:req.body.location||'',
       notes:req.body.notes||'', disposition:req.body.disposition||'return_inventory', observed_condition:req.body.observed_condition||'',
       photos:(req.files||[]).map(f=>`/uploads/${f.filename}`), sellerchamp_url:req.body.sellerchamp_url||'', ebay_url:req.body.ebay_url||'',
       history:[{at:now(),action:'received',details:`Front of house chose ${req.body.disposition||'return_inventory'}`}]
     };
-    const db = readDb(); db.push(record); writeDb(db);
+    db.push(record); writeDb(db);
     res.json({ok:true,record,pdf_url:`/api/returns/${record.id}/pdf`});
   } catch(e){ res.status(500).json({error:e.message}); }
+});
+
+app.get('/api/returns/check-order/:orderNumber', (req,res)=>{
+  const order=formatOrder(req.params.orderNumber);
+  const r=readDb().find(x=>formatOrder(x.order_number)===order);
+  res.json({exists:!!r,record:r?{id:r.id,status:r.status,sku:r.sku,title:r.title,location:r.location,created_at:r.created_at,archived_at:r.archived_at||''}:null});
 });
 
 app.get('/api/returns', (req,res)=>{
@@ -150,7 +163,6 @@ app.get('/api/returns', (req,res)=>{
 
 app.delete('/api/returns/:id/delete', (req,res)=>{
   try{
-    if(String(req.body?.pin||'') !== '8880') return res.status(403).json({error:'Incorrect delete PIN'});
     const db=readDb(), r=db.find(x=>x.id===req.params.id);
     if(!r) return res.status(404).json({error:'Return not found'});
     if(['archived','completed'].includes(r.status)) return res.status(400).json({error:'Only records in Process Returns can be deleted here'});
