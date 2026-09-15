@@ -153,3 +153,41 @@ window.leaveInactiveAndArchive=async id=>{
 };
 window.doReserve=async id=>{if(!confirm('Add this quantity and increase SellerChamp reserve quantity?'))return;try{await api(`/api/returns/${id}/add-reserve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:$('#reserveLoc').value,reserve_location:$('#reserveNote').value,qty:$('#reserveQty').value})});alert('Completed. This return has been archived.');$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}};
 window.doDuplicate=async id=>{if(!confirm('This will create and auto-submit a new SellerChamp/eBay listing. Continue?'))return;try{await api(`/api/returns/${id}/duplicate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sku:$('#newSku').value,title:$('#newTitle').value,item_condition:$('#newCondition').value,item_remarks:$('#newRemarks').value,location:$('#newLoc').value,qty:$('#newQty').value,retail_price:$('#newPrice').value})});alert('New listing submitted. This return has been archived.');$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}};
+
+
+let directProduct=null;
+$('#directSearch').onclick=searchDirectSku;
+$('#directSku').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchDirectSku()}});
+async function searchDirectSku(){
+  const sku=$('#directSku').value.trim();
+  if(!sku)return;
+  $('#directError').textContent=''; $('#directResult').innerHTML='<div class="card">Searching SellerChamp…</div>';
+  try{
+    const j=await api('/api/direct/sku/'+encodeURIComponent(sku)); directProduct=j.product; renderDirect(directProduct);
+  }catch(e){directProduct=null;$('#directResult').innerHTML='';$('#directError').textContent=e.message}
+}
+function directCondition(p){
+  const raw=String(p.item_condition??'').trim();
+  if(raw&&!/^\d+$/.test(raw)){
+    const labels={new:'New',like_new:'Like New',very_good:'Very Good',good:'Good',acceptable:'Acceptable',refurbished:'Refurbished',salvage:'For Parts / Salvage',used:'Used'};
+    return labels[raw.toLowerCase()]||raw.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  }
+  const id=String(p.ebay_item_condition_id??raw??'');
+  return {'1000':'New','1500':'New Other','1750':'New With Defects','2000':'Certified Refurbished','2010':'Excellent - Refurbished','2020':'Very Good - Refurbished','2030':'Good - Refurbished','2500':'Seller Refurbished','3000':'Used','4000':'Very Good','5000':'Good','6000':'Acceptable','7000':'For Parts or Not Working'}[id]||id||'Unknown';
+}
+function renderDirect(p){
+  const locs=(p.locations||[]);
+  const rows=locs.length?locs.map((x,i)=>`<div class="card"><div class="meta"><div><b>Location:</b> ${esc(x.location||'NO LOCATION')}</div><div><b>Quantity at this location:</b> ${esc(x.quantity_available)}</div></div><label>Adjust quantity at ${esc(x.location||'this location')}</label><div class="row"><input id="directQty${i}" type="number" inputmode="numeric" min="0" value="${esc(x.quantity_available)}"><button onclick="updateDirectQty(${i})">Update Quantity</button></div></div>`).join(''):`<div class="card"><p>No inventory locations are currently assigned.</p><label>Location</label><input id="directNewLoc"><label>Quantity</label><input id="directNewQty" type="number" inputmode="numeric" min="0" value="0"><button onclick="addDirectLocation()">Set Quantity</button></div>`;
+  $('#directResult').innerHTML=`<div class="card"><h2>${esc(p.sku)}</h2><div class="meta"><div><b>Location:</b> ${esc(locs.map(x=>x.location).filter(Boolean).join(', ')||'NO LOCATION')}</div><div><b>Title:</b> ${esc(p.title)}</div><div><b>Quantity On Hand:</b> ${esc(p.quantity_on_hand)}</div><div><b>Quantity In Reserve:</b> ${esc(p.reserve_quantity)}</div><div><b>eBay Condition:</b> ${esc(directCondition(p))} - ${esc(p.item_remarks||'No Item Remarks')}</div></div></div>${rows}`;
+}
+window.updateDirectQty=async i=>{
+  const row=directProduct.locations[i], qty=$(`#directQty${i}`).value;
+  if(!confirm(`Change ${row.location} quantity from ${row.quantity_available} to ${qty}?`))return;
+  try{await api(`/api/direct/product/${directProduct.id}/quantity`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:row.location,quantity:qty})});await searchDirectSku()}catch(e){alert(e.message)}
+};
+window.addDirectLocation=async()=>{
+  const loc=$('#directNewLoc').value.trim(),qty=$('#directNewQty').value;
+  if(!loc)return alert('Enter a location.');
+  if(!confirm(`Set ${loc} quantity to ${qty}?`))return;
+  try{await api(`/api/direct/product/${directProduct.id}/quantity`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:loc,quantity:qty})});await searchDirectSku()}catch(e){alert(e.message)}
+};

@@ -155,6 +155,32 @@ app.post('/api/returns', upload.array('photos',6), (req,res)=>{
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
+app.get('/api/direct/sku/:sku', async(req,res)=>{
+  try{
+    const sku=String(req.params.sku||'').trim(); if(!sku)return res.status(400).json({error:'Enter a SKU'});
+    const found=await sc(`/api/products?sku=${encodeURIComponent(sku)}&page=1&page_size=50`);
+    let product=(found.products||[]).find(x=>String(x.sku).toLowerCase()===sku.toLowerCase())||(found.products||[])[0];
+    if(!product)return res.status(404).json({error:'SKU not found in SellerChamp'});
+    try{const full=await sc(`/api/products/${product.id}`);product=full.product||full||product}catch{}
+    let inv=[]; try{inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[]}catch{}
+    const locations=inv.map(x=>({id:x.id,location:x.location||'',quantity_available:Number(x.quantity_available||0),priority:x.priority||1,delete_if_empty:x.delete_if_empty!==false}));
+    const qtyOnHand=locations.reduce((n,x)=>n+x.quantity_available,0);
+    res.json({product:{id:product.id,sku:product.sku,title:product.title||'',item_condition:product.item_condition??'',ebay_item_condition_id:product.ebay_item_condition_id??product.item_condition_id??'',item_remarks:product.item_remarks||'',reserve_quantity:Number(product.reserve_quantity||0),reserve_quantity_location:product.reserve_quantity_location||'',locations,quantity_on_hand:qtyOnHand}});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+app.post('/api/direct/product/:productId/quantity', async(req,res)=>{
+  try{
+    const productId=req.params.productId, loc=String(req.body.location||'').trim(), qty=Number(req.body.quantity);
+    if(!loc)return res.status(400).json({error:'Location is required'});
+    if(!Number.isFinite(qty)||qty<0)return res.status(400).json({error:'Enter a valid quantity of 0 or more'});
+    const inv=(await sc(`/api/products/${productId}/inventory_locations`)).inventory_locations||[];
+    const row=inv.find(x=>String(x.location||'').toLowerCase()===loc.toLowerCase());
+    if(row) await sc(`/api/products/${productId}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:qty,delete_if_empty:row.delete_if_empty!==false,priority:row.priority||1}})});
+    else await sc(`/api/products/${productId}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
+    res.json({ok:true,location:loc,quantity_available:qty});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.get('/api/returns/check-order/:orderNumber', (req,res)=>{
   const order=formatOrder(req.params.orderNumber);
   const r=readDb().find(x=>formatOrder(x.order_number)===order);

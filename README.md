@@ -131,3 +131,11 @@ PDF-only wording/formatting changes:
 - Return Intake now fetches the full SellerChamp product after the SKU match.
 - Displays SellerChamp `item_condition` as a readable condition name; eBay numeric condition ID is only a fallback.
 - Displays and saves the full product `item_remarks` value as the Item Remarks Description.
+
+
+## V2-10
+- Added **4. Add Direct**.
+- Search SellerChamp by SKU.
+- Report shows Location, Title, Quantity On Hand, Quantity In Reserve, and `eBay Condition - Item Remarks Description`.
+- Shows inventory by location and allows the quantity at each location to be changed, with confirmation.
+- If the product has no inventory location, a location and quantity can be entered directly.
