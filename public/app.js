@@ -3,6 +3,23 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&
 function formatOrder(v){const d=String(v).replace(/\D/g,'').slice(0,12);if(d.length<=2)return d;if(d.length<=7)return d.slice(0,2)+'-'+d.slice(2);return d.slice(0,2)+'-'+d.slice(2,7)+'-'+d.slice(7)}
 async function api(url,opt={}){const r=await fetch(url,opt),j=await r.json().catch(()=>({error:'Unexpected response'}));if(r.status===401&&j.pin_required){$('#pinGate').classList.remove('hidden');throw new Error('Enter the app PIN to continue.')}if(!r.ok)throw new Error(j.error||'Request failed');return j}
 $('#orderInput').addEventListener('input',e=>e.target.value=formatOrder(e.target.value));
+
+$('#speakOrder').onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('Direct voice recognition is not available in this browser. The number-pad entry will continue to work normally.');return;}
+  const r=new SR(); r.lang='en-US'; r.interimResults=false; r.maxAlternatives=3;
+  $('#speakOrder').textContent='🎤 Listening…';
+  r.onresult=e=>{
+    const spoken=Array.from(e.results[0]||[]).map(x=>x.transcript).join(' ');
+    let d=String(spoken).replace(/\b(zero|oh)\b/gi,'0').replace(/\bone\b/gi,'1').replace(/\btwo\b/gi,'2').replace(/\bthree\b/gi,'3').replace(/\bfour\b/gi,'4').replace(/\bfive\b/gi,'5').replace(/\bsix\b/gi,'6').replace(/\bseven\b/gi,'7').replace(/\beight\b/gi,'8').replace(/\bnine\b/gi,'9').replace(/\D/g,'').slice(0,12);
+    $('#orderInput').value=formatOrder(d);
+    if(d.length!==12) $('#orderError').textContent='I heard '+d.length+' digits. Please check the order number before searching.';
+  };
+  r.onerror=e=>{if(e.error!=='aborted')$('#orderError').textContent='Voice recognition did not get the order number. Please try again or use the number pad.'};
+  r.onend=()=>$('#speakOrder').textContent='🎤 Speak Order';
+  try{r.start()}catch(e){$('#speakOrder').textContent='🎤 Speak Order'}
+};
+
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='back')loadQueue();if(b.dataset.tab==='archived')loadArchive()});
 (async()=>{try{const c=await api('/api/config');if(c.pinRequired&&!c.authenticated)$('#pinGate').classList.remove('hidden')}catch(e){$('#pinGate').classList.remove('hidden')}})();
 $('#pinForm').onsubmit=async e=>{e.preventDefault();const j=await api('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:$('#pin').value})});if(j.ok){$('#pinError').textContent='';$('#pinGate').classList.add('hidden')}else $('#pinError').textContent='Incorrect PIN'};
@@ -35,6 +52,15 @@ window.showArchived=async id=>{
     $('#archiveDetail').innerHTML=`<div class="card"><div class="row spread"><div><h2>${esc(r.title)}</h2><span class="badge">ARCHIVED</span></div><div class="hint">${esc(when(r.archived_at))}</div></div><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty Returned:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Original Condition:</b> ${esc(r.original_condition)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front Decision:</b> ${esc(dispositionLabel(r.disposition))}</div><div><b>Status:</b> Archived</div></div><h3>Instructions / Notes</h3><p>${esc(r.notes||'None')}</p><div class="photos">${(r.photos||[]).map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}">SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div></div><div class="card"><h2>Processing History</h2>${hist}</div>`;
     $('#archiveDetail').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){$('#archiveDetail').innerHTML=`<div class="card error">${esc(e.message)}</div>`}
+};
+
+
+$('#purgeArchive').onclick=async()=>{
+  const count=archivedRows.filter(r=>r.archived_at&&(Date.now()-new Date(r.archived_at).getTime())>60*24*60*60*1000).length;
+  if(!count){alert('There are no archived returns older than 60 days.');return;}
+  if(!confirm(`Permanently delete ${count} archived return${count===1?'':'s'} older than 60 days, including their stored photos? This cannot be undone.`))return;
+  if(!confirm('Final confirmation: permanently delete these old archived returns?'))return;
+  try{const j=await api('/api/returns/archive/purge-older-than-60-days',{method:'DELETE'});alert(`Deleted ${j.deleted} archived return${j.deleted===1?'':'s'}.`);$('#archiveDetail').innerHTML='';await loadArchive()}catch(e){alert(e.message)}
 };
 
 $('#refreshQueue').onclick=loadQueue;

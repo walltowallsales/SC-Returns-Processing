@@ -46,3 +46,16 @@ SellerChamp documents `marketplace_status` on products and supports `PUT /api/pr
 ## v1.5
 - Changed SellerChamp links to open the Products section filtered by the item's SKU instead of the product-info route.
 - Disabled automatic telephone-number detection on iPhone so SKU text no longer opens the dialer.
+
+
+## v1.6
+- Added a separate **Speak Order** microphone button while keeping the Order ID field numeric-keypad friendly.
+- Uses Render persistent storage at `/var/data` for the returns database and uploaded return photos.
+- Added **Delete Archived > 60 Days** with two confirmations. It deletes only archived records older than 60 days and their stored photos.
+
+### IMPORTANT: make storage permanent on your existing Render service
+The included `render.yaml` defines a 1 GB Persistent Disk mounted at `/var/data` and sets `DATA_DIR=/var/data`.
+
+If your existing Render service was created manually rather than from the included Blueprint, updating the files alone will not create that disk. In Render, add a Persistent Disk mounted at `/var/data`, then set the environment variable `DATA_DIR` to `/var/data` and redeploy. Keep that same disk attached during future app upgrades.
+
+The 60-day cleanup is manual only; records are not automatically deleted.

@@ -133,6 +133,17 @@ app.get('/api/returns', (req,res)=>{
   rows.sort((a,b)=>(a.location||'').localeCompare(b.location||'',undefined,{numeric:true,sensitivity:'base'}) || a.created_at.localeCompare(b.created_at));
   res.json({returns:rows});
 });
+
+app.delete('/api/returns/archive/purge-older-than-60-days', (req,res)=>{
+  try{
+    const db=readDb(), cutoff=Date.now()-(60*24*60*60*1000);
+    const doomed=db.filter(r=>r.status==='archived'&&r.archived_at&&new Date(r.archived_at).getTime()<cutoff);
+    for(const r of doomed) for(const photo of (r.photos||[])){const file=path.join(UPLOAD_DIR,path.basename(photo));try{if(fs.existsSync(file))fs.unlinkSync(file)}catch{}}
+    const ids=new Set(doomed.map(r=>r.id)); writeDb(db.filter(r=>!ids.has(r.id)));
+    res.json({ok:true,deleted:doomed.length,cutoff:new Date(cutoff).toISOString()});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.get('/api/returns/:id', (req,res)=>{ const r=readDb().find(x=>x.id===req.params.id); if(!r) return res.status(404).json({error:'Return not found'}); res.json({return:r}); });
 
 function pdfText(doc,label,value){ doc.font('Helvetica-Bold').text(label,{continued:true}); doc.font('Helvetica').text(` ${value||''}`); }
