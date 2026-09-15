@@ -118,3 +118,10 @@ PDF-only wording/formatting changes:
 - Added `Move Back to Process Returns` for Archived records.
 - PDF: Observed Condition label is bold; only the observed value is underlined.
 - PDF: Instructions is bold with a colon and the instruction text continues on the same line, with no forced carriage return and no underline.
+
+
+## V2-8
+- Return Intake now shows `eBay Condition - Item Remarks Description` directly below the SKU.
+- Option 1 now reports the actual SellerChamp quantity at the selected location after the returned inventory is added.
+- The user can correct that stock quantity before completing the return.
+- Active listings wait for quantity review before archiving; inactive listings still offer activation or leave-inactive choices after the quantity is reviewed/corrected.

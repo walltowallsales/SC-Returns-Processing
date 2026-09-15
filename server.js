@@ -291,15 +291,37 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     r.inventory_result={at:now(),qty,location:loc,product_id:product.id,marketplace_status:marketplaceStatus};
     r.updated_at=now();
     r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}`});
-    if(marketplaceStatus==='active'){
-      archiveRecord(r,'archived','Inventory returned; eBay listing already active.');
-    }else{
-      r.status='inventory_added_pending_listing';
-    }
+    r.status='inventory_added_pending_listing';
+    const after=await getProductAndInventory(r);
+    const afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
+    const currentQty=Number(afterRow?.quantity_available||0);
+    r.inventory_result.quantity_available=currentQty;
     writeDb(db);
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:r.status==='archived',product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||''});
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty});
   }catch(e){res.status(500).json({error:e.message});}
 });
+app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{
+  try{
+    const db=readDb(), r=db.find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
+    const qty=Number(req.body.quantity);
+    if(!Number.isFinite(qty)||qty<0)return res.status(400).json({error:'Enter a valid quantity of 0 or more.'});
+    const {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
+    const row=inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
+    if(row) await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:qty,delete_if_empty:row.delete_if_empty!==false,priority:row.priority||1}})});
+    else await sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
+    r.updated_at=now(); r.history=r.history||[]; r.history.push({at:now(),action:'inventory_quantity_corrected',details:`Set ${loc} quantity to ${qty}`}); writeDb(db);
+    res.json({ok:true,quantity_available:qty,location:loc});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
+app.post('/api/returns/:id/archive-active', (req,res)=>{
+  try{
+    const db=readDb(), r=db.find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
+    if(r.status!=='inventory_added_pending_listing')return res.status(409).json({error:'Inventory must be added first.'});
+    archiveRecord(r,'archived','Inventory returned; eBay listing active; quantity reviewed.'); writeDb(db); res.json({ok:true});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
   try{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
