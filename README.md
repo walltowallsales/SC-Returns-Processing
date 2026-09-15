@@ -125,3 +125,9 @@ PDF-only wording/formatting changes:
 - Option 1 now reports the actual SellerChamp quantity at the selected location after the returned inventory is added.
 - The user can correct that stock quantity before completing the return.
 - Active listings wait for quantity review before archiving; inactive listings still offer activation or leave-inactive choices after the quantity is reviewed/corrected.
+
+
+## V2-9
+- Return Intake now fetches the full SellerChamp product after the SKU match.
+- Displays SellerChamp `item_condition` as a readable condition name; eBay numeric condition ID is only a fallback.
+- Displays and saves the full product `item_remarks` value as the Item Remarks Description.

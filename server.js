@@ -111,6 +111,12 @@ app.get('/api/order/:orderNumber', async (req,res) => {
           product = (p.products||[]).find(x=>x.sku===item.sku) || (p.products||[])[0] || null;
         } catch {}
       }
+      if(product?.id){
+        try{
+          const full=await sc(`/api/products/${product.id}`);
+          product=full.product||full||product;
+        }catch{}
+      }
       let inv = [];
       if(product?.id){ try { inv = (await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations || []; } catch {} }
       const location = item.warehouse_location || product?.item_location || product?.bin_location || inv?.[0]?.location || '';
