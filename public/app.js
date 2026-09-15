@@ -157,6 +157,22 @@ window.doDuplicate=async id=>{if(!confirm('This will create and auto-submit a ne
 
 let directProduct=null;
 $('#directSearch').onclick=searchDirectSku;
+$('#directSpeak').onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('Direct voice recognition is not available in this browser. The number-pad entry will continue to work normally.');return;}
+  const r=new SR(); r.lang='en-US'; r.interimResults=false; r.maxAlternatives=3;
+  $('#directSpeak').textContent='🎤 Listening…';
+  r.onresult=e=>{
+    const spoken=Array.from(e.results[0]||[]).map(x=>x.transcript).join(' ');
+    const d=String(spoken).replace(/\b(zero|oh)\b/gi,'0').replace(/\bone\b/gi,'1').replace(/\btwo\b/gi,'2').replace(/\bthree\b/gi,'3').replace(/\bfour\b/gi,'4').replace(/\bfive\b/gi,'5').replace(/\bsix\b/gi,'6').replace(/\bseven\b/gi,'7').replace(/\beight\b/gi,'8').replace(/\bnine\b/gi,'9').replace(/\D/g,'');
+    $('#directSku').value=d;
+    if(d) searchDirectSku();
+  };
+  r.onerror=e=>{if(e.error!=='aborted')$('#directError').textContent='Voice recognition did not get the SKU. Please try again or use the number pad.'};
+  r.onend=()=>$('#directSpeak').textContent='🎤 Speak SKU';
+  try{r.start()}catch(e){$('#directSpeak').textContent='🎤 Speak SKU'}
+};
+
 $('#directSku').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchDirectSku()}});
 async function searchDirectSku(){
   const sku=$('#directSku').value.trim();

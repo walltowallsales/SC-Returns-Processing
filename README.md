@@ -139,3 +139,9 @@ PDF-only wording/formatting changes:
 - Report shows Location, Title, Quantity On Hand, Quantity In Reserve, and `eBay Condition - Item Remarks Description`.
 - Shows inventory by location and allows the quantity at each location to be changed, with confirmation.
 - If the product has no inventory location, a location and quantity can be entered directly.
+
+
+## V2-11
+- 4. Add Direct SKU field now requests the numeric keypad on mobile.
+- Added a separate `Speak SKU` microphone button, matching the Return Intake approach.
+- Spoken SKU digits are inserted into the field and searched automatically.
