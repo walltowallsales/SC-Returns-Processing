@@ -59,3 +59,19 @@ The included `render.yaml` defines a 1 GB Persistent Disk mounted at `/var/data`
 If your existing Render service was created manually rather than from the included Blueprint, updating the files alone will not create that disk. In Render, add a Persistent Disk mounted at `/var/data`, then set the environment variable `DATA_DIR` to `/var/data` and redeploy. Keep that same disk attached during future app upgrades.
 
 The 60-day cleanup is manual only; records are not automatically deleted.
+
+
+## V2
+- PDF title now uses the largest font that fits `RETURN PROCESSING SHEET` on one line.
+- Original condition is translated from common SellerChamp/eBay numeric condition IDs to a condition name.
+- Added a blank line between Observed Condition and Front-of-House Decision.
+- Instructions / Notes content is bold.
+- View in SellerChamp now uses the same `app2.sellerchamp.com/products` SKU-search URL pattern used by the SellerChamp Pick app.
+- New release naming starts at `SellerChamp-returns-V2.zip`; future updates should continue from V2.
+
+
+## V2.1
+- Added a Delete button to every record in **2. Process Returns**.
+- Deletion requires the dedicated PIN `8880`.
+- A confirmation is required after the PIN.
+- Deleting permanently removes the active return record and its stored return photos.

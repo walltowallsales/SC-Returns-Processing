@@ -58,7 +58,21 @@ async function sc(endpoint, options={}){
 }
 const first = (o,...keys) => { for(const k of keys) if(o && o[k] !== undefined && o[k] !== null && o[k] !== '') return o[k]; return null; };
 const ebayUrl = p => { const id = first(p,'marketplace_id','ebay_item_id'); return id ? `https://www.ebay.com/itm/${encodeURIComponent(id)}` : (p?.marketplace_url || ''); };
-const sellerChampUrl = p => p?.sku ? `https://app.sellerchamp.com/products?sku=${encodeURIComponent(p.sku)}` : 'https://app.sellerchamp.com/products';
+const conditionName = v => {
+  const raw=String(v??'').trim();
+  const names={
+    '1000':'New','1500':'New other (see details)','1750':'New with defects',
+    '2000':'Certified refurbished','2010':'Excellent - Refurbished','2020':'Very Good - Refurbished',
+    '2030':'Good - Refurbished','2500':'Seller refurbished','3000':'Used',
+    '4000':'Very Good','5000':'Good','6000':'Acceptable','7000':'For parts or not working'
+  };
+  return names[raw] || raw || 'Unknown';
+};
+const sellerChampUrl = p => {
+  if(!p?.sku) return 'https://app2.sellerchamp.com/products';
+  const q=encodeURIComponent(p.sku);
+  return `https://app2.sellerchamp.com/products?utf8=%E2%9C%93&listings_filter=all&product%5Bmarketplace_manually_removed%5D=false&product%5Bquery%5D=${q}&product%5Bquery_comparison%5D=&product%5Bquery_field%5D=&product%5Bstatus%5D=&product%5Bitem_condition%5D=all&per_page=50`;
+};
 
 app.get('/api/config', (req,res)=>res.json({pinRequired:!!process.env.APP_PIN, authenticated:authValid(req), duplicateReady:!!(process.env.SC_SHIP_FROM_ADDRESS_ID && process.env.SC_EBAY_TEMPLATE_ID && process.env.RETURN_APP_BASE_URL)}));
 app.post('/api/pin', (req,res)=>{
@@ -134,6 +148,21 @@ app.get('/api/returns', (req,res)=>{
   res.json({returns:rows});
 });
 
+app.delete('/api/returns/:id/delete', (req,res)=>{
+  try{
+    if(String(req.body?.pin||'') !== '8880') return res.status(403).json({error:'Incorrect delete PIN'});
+    const db=readDb(), r=db.find(x=>x.id===req.params.id);
+    if(!r) return res.status(404).json({error:'Return not found'});
+    if(['archived','completed'].includes(r.status)) return res.status(400).json({error:'Only records in Process Returns can be deleted here'});
+    for(const photo of (r.photos||[])){
+      const file=path.join(UPLOAD_DIR,path.basename(photo));
+      try{if(fs.existsSync(file))fs.unlinkSync(file)}catch{}
+    }
+    writeDb(db.filter(x=>x.id!==req.params.id));
+    res.json({ok:true});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.delete('/api/returns/archive/purge-older-than-60-days', (req,res)=>{
   try{
     const db=readDb(), cutoff=Date.now()-(60*24*60*60*1000);
@@ -151,10 +180,14 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   const r = readDb().find(x=>x.id===req.params.id); if(!r) return res.status(404).send('Return not found');
   res.setHeader('Content-Type','application/pdf'); res.setHeader('Content-Disposition',`inline; filename="return-${r.order_number||r.id}.pdf"`);
   const doc = new PDFDocument({size:'LETTER',margin:36}); doc.pipe(res);
-  doc.fontSize(40).font('Helvetica-Bold').text('RETURN PROCESSING SHEET',{align:'center'}).moveDown(.6);
-  doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',r.original_condition); pdfText(doc,'Observed Condition:',r.observed_condition);
+  doc.font('Helvetica-Bold');
+  let titleSize=40;
+  while(titleSize>10 && doc.widthOfString('RETURN PROCESSING SHEET',{font:'Helvetica-Bold',size:titleSize}) > 540) titleSize--;
+  doc.fontSize(titleSize).text('RETURN PROCESSING SHEET',{align:'center',lineBreak:false}).moveDown(.6);
+  doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Observed Condition:',r.observed_condition);
+  doc.moveDown(.6);
   pdfText(doc,'Front-of-House Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
-  doc.moveDown(.4).font('Helvetica-Bold').text('Instructions / Notes'); doc.font('Helvetica').text(r.notes||'None',{width:540}).moveDown(.7);
+  doc.moveDown(.4).font('Helvetica-Bold').text('Instructions / Notes'); doc.font('Helvetica-Bold').text(r.notes||'None',{width:540}).moveDown(.7);
   const files = r.photos.slice(0,6).map(p=>path.join(UPLOAD_DIR,path.basename(p))).filter(fs.existsSync);
   if(files.length){
     doc.font('Helvetica-Bold').text('Return Photos').moveDown(.3); let x=36, y=doc.y, w=168, h=120;
