@@ -185,6 +185,27 @@ app.delete('/api/returns/archive/purge-older-than-60-days', (req,res)=>{
   }catch(e){res.status(500).json({error:e.message})}
 });
 
+app.delete('/api/returns/:id/archive-delete', (req,res)=>{
+  try{
+    const db=readDb(), r=db.find(x=>x.id===req.params.id);
+    if(!r)return res.status(404).json({error:'Return not found'});
+    if(r.status!=='archived')return res.status(400).json({error:'Only archived returns can be deleted here'});
+    for(const photo of (r.photos||[])){const file=path.join(UPLOAD_DIR,path.basename(photo));try{if(fs.existsSync(file))fs.unlinkSync(file)}catch{}}
+    writeDb(db.filter(x=>x.id!==req.params.id));
+    res.json({ok:true});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+app.post('/api/returns/:id/restore-to-process', (req,res)=>{
+  try{
+    const db=readDb(), r=db.find(x=>x.id===req.params.id);
+    if(!r)return res.status(404).json({error:'Return not found'});
+    if(r.status!=='archived')return res.status(400).json({error:'Only archived returns can be moved back'});
+    r.status='awaiting_processing'; r.updated_at=now(); r.archived_at='';
+    r.history=r.history||[]; r.history.push({at:now(),action:'restored_to_process',details:'Moved from Archived back to Process Returns'});
+    writeDb(db); res.json({ok:true});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.get('/api/returns/:id', (req,res)=>{ const r=readDb().find(x=>x.id===req.params.id); if(!r) return res.status(404).json({error:'Return not found'}); res.json({return:r}); });
 
 function pdfText(doc,label,value){ doc.font('Helvetica-Bold').text(label,{continued:true}); doc.font('Helvetica').text(` ${value||''}`); }
@@ -204,14 +225,15 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   doc.y=82;
   doc.x=36; doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Original Item Remarks Description:',r.item_remarks||'');
   doc.moveDown(.6);
-  pdfUnderlinedText(doc,'Observed Condition:',r.observed_condition);
+  doc.font('Helvetica-Bold').text('Observed Condition:',{continued:true});
+  const obsX=doc.x, obsY=doc.y, obsText=` ${r.observed_condition||''}`;
+  doc.font('Helvetica').text(obsText);
+  const obsW=Math.min(doc.widthOfString(obsText),Math.max(0,576-obsX));
+  doc.moveTo(obsX,obsY+doc.currentLineHeight()).lineTo(obsX+obsW,obsY+doc.currentLineHeight()).stroke();
   doc.moveDown(.6);
   pdfText(doc,'Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
-  doc.moveDown(.4).font('Helvetica').text('Instructions');
-  const notesY=doc.y, notesX=doc.x, notesText=String(r.notes||'None');
-  doc.font('Helvetica').text(notesText,{width:540});
-  doc.moveTo(notesX,notesY+doc.currentLineHeight()).lineTo(notesX+Math.min(doc.widthOfString(notesText),540),notesY+doc.currentLineHeight()).stroke();
-  doc.moveDown(.7);
+  doc.moveDown(.4).font('Helvetica-Bold').text('Instructions:',{continued:true});
+  doc.font('Helvetica').text(` ${r.notes||'None'}`).moveDown(.7);
   const files = r.photos.slice(0,6).map(p=>path.join(UPLOAD_DIR,path.basename(p))).filter(fs.existsSync);
   if(files.length){
     doc.font('Helvetica-Bold').text('Return Photos').moveDown(.3); let x=36, y=doc.y, w=168, h=120;

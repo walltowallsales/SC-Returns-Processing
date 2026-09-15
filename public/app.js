@@ -62,11 +62,25 @@ window.showArchived=async id=>{
   try{
     const r=(await api('/api/returns/'+id)).return;
     const hist=(r.history||[]).slice().reverse().map(h=>`<div class="history-row"><b>${esc(when(h.at))}</b><br>${esc(h.action||'')}<br><span class="hint">${esc(h.details||'')}</span></div>`).join('')||'<p>No processing history recorded.</p>';
-    $('#archiveDetail').innerHTML=`<div class="card"><div class="row spread"><div><h2>${esc(r.title)}</h2><span class="badge">ARCHIVED</span></div><div class="hint">${esc(when(r.archived_at))}</div></div><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty Returned:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Original Condition:</b> ${esc(r.original_condition)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front Decision:</b> ${esc(dispositionLabel(r.disposition))}</div><div><b>Status:</b> Archived</div></div><h3>Instructions / Notes</h3><p>${esc(r.notes||'None')}</p><div class="photos">${(r.photos||[]).map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}">SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div></div><div class="card"><h2>Processing History</h2>${hist}</div>`;
+    $('#archiveDetail').innerHTML=`<div class="card"><div class="row spread"><div><h2>${esc(r.title)}</h2><span class="badge">ARCHIVED</span></div><div class="hint">${esc(when(r.archived_at))}</div></div><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty Returned:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Original Condition:</b> ${esc(r.original_condition)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front Decision:</b> ${esc(dispositionLabel(r.disposition))}</div><div><b>Status:</b> Archived</div></div><h3>Instructions / Notes</h3><p>${esc(r.notes||'None')}</p><div class="photos">${(r.photos||[]).map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sku?`<a target="_blank" href="https://app2.sellerchamp.com/products?utf8=%E2%9C%93&listings_filter=all&product%5Bmarketplace_manually_removed%5D=false&product%5Bquery%5D=${encodeURIComponent(r.sku)}&product%5Bquery_comparison%5D=&product%5Bquery_field%5D=&product%5Bstatus%5D=&product%5Bitem_condition%5D=all&per_page=50">View in SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div><div class="row"><button class="secondary" onclick="restoreArchived('${r.id}')">Move Back to Process Returns</button><button class="danger" onclick="deleteArchived('${r.id}')">Delete Archived Record</button></div></div><div class="card"><h2>Processing History</h2>${hist}</div>`;
     $('#archiveDetail').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){$('#archiveDetail').innerHTML=`<div class="card error">${esc(e.message)}</div>`}
 };
 
+
+
+window.deleteArchived=async id=>{
+  if(!confirm('Permanently delete this archived return and its stored photos? This cannot be undone.'))return;
+  try{await api(`/api/returns/${id}/archive-delete`,{method:'DELETE'});$('#archiveDetail').innerHTML='';await loadArchive()}catch(e){alert(e.message)}
+};
+window.restoreArchived=async id=>{
+  if(!confirm('Move this archived return back to 2. Process Returns?'))return;
+  try{
+    await api(`/api/returns/${id}/restore-to-process`,{method:'POST'});
+    $('#archiveDetail').innerHTML=''; await loadArchive();
+    alert('Return moved back to 2. Process Returns.');
+  }catch(e){alert(e.message)}
+};
 
 $('#purgeArchive').onclick=async()=>{
   const count=archivedRows.filter(r=>r.archived_at&&(Date.now()-new Date(r.archived_at).getTime())>60*24*60*60*1000).length;

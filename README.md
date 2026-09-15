@@ -110,3 +110,11 @@ PDF-only wording/formatting changes:
 - `Instructions / Notes` → `Instructions`.
 - Instructions content is no longer bold and is underlined.
 - Observed Condition line/content is underlined.
+
+
+## V2-7
+- Fixed Archived `View in SellerChamp` to generate the working app2 Products SKU-search link directly from the archived SKU.
+- Added confirmed permanent deletion for individual Archived records.
+- Added `Move Back to Process Returns` for Archived records.
+- PDF: Observed Condition label is bold; only the observed value is underlined.
+- PDF: Instructions is bold with a colon and the instruction text continues on the same line, with no forced carriage return and no underline.
