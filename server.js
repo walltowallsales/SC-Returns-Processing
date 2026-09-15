@@ -184,7 +184,9 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   doc.font('Helvetica-Bold').fontSize(32).text('RETURN PROCESSING SHEET',36,36,{width:540,align:'center'});
   doc.x=36;
   doc.y=82;
-  doc.x=36; doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Observed Condition:',r.observed_condition);
+  doc.x=36; doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Item Remarks Description:',r.item_remarks||'');
+  doc.moveDown(.6);
+  pdfText(doc,'Observed Condition:',r.observed_condition);
   doc.moveDown(.6);
   pdfText(doc,'Front-of-House Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
   doc.moveDown(.4).font('Helvetica-Bold').text('Instructions / Notes'); doc.font('Helvetica-Bold').text(r.notes||'None',{width:540}).moveDown(.7);
@@ -220,6 +222,15 @@ async function addAtLocation(product, inv, loc, qty){
   if(row) return sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:Number(row.quantity_available||0)+qty,delete_if_empty:row.delete_if_empty!==false,priority:row.priority||1}})});
   return sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
 }
+app.get('/api/returns/:id/listing-status', async(req,res)=>{
+  try{
+    const r=readDb().find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
+    const {product}=await getProductAndInventory(r);
+    const refreshed=await freshProduct(product.id);
+    res.json({marketplace_status:String(refreshed.marketplace_status||product.marketplace_status||'unknown').toLowerCase(),product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||''});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.post('/api/returns/:id/add-inventory', async(req,res)=>{
   try{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});

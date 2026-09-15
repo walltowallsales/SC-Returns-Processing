@@ -86,3 +86,10 @@ The 60-day cleanup is manual only; records are not automatically deleted.
 - Reworked the PDF header positioning to avoid PDFKit's `lineBreak:false` cursor behavior.
 - The title is fixed to one centered line at the top.
 - The body cursor is explicitly reset to the left margin before return details are written, preventing text from running down the right edge or creating many pages.
+
+
+## V2-4
+- PDF: added SellerChamp Item Remarks Description immediately after Original Condition, followed by a blank line before Observed Condition.
+- Process Returns queue placard now shows `Order: <order number>` before the SKU.
+- Option 1 now checks and displays the current eBay marketplace status as soon as a return is opened.
+- If the listing is not active, the existing post-inventory workflow presents the option to activate/relist it before archiving.
