@@ -80,3 +80,9 @@ The 60-day cleanup is manual only; records are not automatically deleted.
 ## V2.2
 - Fixed a PDF title-sizing bug that caused the body text to render invisibly after the V2 title change.
 - Preserves all V2 PDF formatting requests and the V2.1 Process Returns delete button/PIN.
+
+
+## V2-3
+- Reworked the PDF header positioning to avoid PDFKit's `lineBreak:false` cursor behavior.
+- The title is fixed to one centered line at the top.
+- The body cursor is explicitly reset to the left margin before return details are written, preventing text from running down the right edge or creating many pages.

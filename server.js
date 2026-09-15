@@ -180,15 +180,11 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   const r = readDb().find(x=>x.id===req.params.id); if(!r) return res.status(404).send('Return not found');
   res.setHeader('Content-Type','application/pdf'); res.setHeader('Content-Disposition',`inline; filename="return-${r.order_number||r.id}.pdf"`);
   const doc = new PDFDocument({size:'LETTER',margin:36}); doc.pipe(res);
-  doc.font('Helvetica-Bold');
-  let titleSize=40;
-  while(titleSize>10){
-    doc.fontSize(titleSize);
-    if(doc.widthOfString('RETURN PROCESSING SHEET') <= 540) break;
-    titleSize--;
-  }
-  doc.fontSize(titleSize).text('RETURN PROCESSING SHEET',{align:'center',lineBreak:false}).moveDown(.6);
-  doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Observed Condition:',r.observed_condition);
+  // Keep the title on one line without using lineBreak:false, which changes PDFKit's text cursor.
+  doc.font('Helvetica-Bold').fontSize(32).text('RETURN PROCESSING SHEET',36,36,{width:540,align:'center'});
+  doc.x=36;
+  doc.y=82;
+  doc.x=36; doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Observed Condition:',r.observed_condition);
   doc.moveDown(.6);
   pdfText(doc,'Front-of-House Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
   doc.moveDown(.4).font('Helvetica-Bold').text('Instructions / Notes'); doc.font('Helvetica-Bold').text(r.notes||'None',{width:540}).moveDown(.7);
