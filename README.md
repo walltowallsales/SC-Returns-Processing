@@ -34,3 +34,15 @@ After a back-of-house action is completed, the return record is marked `archived
 
 ## eBay relisting
 SellerChamp documents `marketplace_status` on products and supports `PUT /api/products/PRODUCT_ID?relist=true` to relist an inactive marketplace item. The app uses that documented relist path for the **Activate eBay Item** button.
+
+## Version 1.3
+- Large Open / Print PDF buttons in intake, processing, and archive views.
+- Process Returns now scrolls to the top of the selected return instead of the bottom.
+
+
+## v1.4
+- Doubled the text size throughout the printable return PDF for easier reading.
+
+## v1.5
+- Changed SellerChamp links to open the Products section filtered by the item's SKU instead of the product-info route.
+- Disabled automatic telephone-number detection on iPhone so SKU text no longer opens the dialer.

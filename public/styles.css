@@ -3,3 +3,5 @@
 .listing-warning{margin-top:14px;padding:14px;border:2px solid #d68a00;border-radius:12px;background:#fff7e6}.listing-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}@media(max-width:600px){.listing-actions{grid-template-columns:1fr}}
 
 #archiveSearch{margin:8px 0 12px}.archived-row{opacity:.96}.history-row{padding:10px 0;border-top:1px solid #e5e9ef}.history-row:first-of-type{border-top:0}
+
+.pdf-button{display:block!important;background:#1769e0!important;color:#fff!important;font-size:18px!important;font-weight:850!important;padding:16px 18px!important;border-radius:12px!important;text-align:center;text-decoration:none;margin:10px 0}.msg .pdf-button{margin-top:12px}.pdf-button:active{transform:scale(.99)}#detail,#archiveDetail{scroll-margin-top:125px}

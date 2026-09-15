@@ -58,7 +58,7 @@ async function sc(endpoint, options={}){
 }
 const first = (o,...keys) => { for(const k of keys) if(o && o[k] !== undefined && o[k] !== null && o[k] !== '') return o[k]; return null; };
 const ebayUrl = p => { const id = first(p,'marketplace_id','ebay_item_id'); return id ? `https://www.ebay.com/itm/${encodeURIComponent(id)}` : (p?.marketplace_url || ''); };
-const sellerChampUrl = p => p?.id ? `https://app.sellerchamp.com/products/${p.id}` : 'https://app.sellerchamp.com';
+const sellerChampUrl = p => p?.sku ? `https://app.sellerchamp.com/products?sku=${encodeURIComponent(p.sku)}` : 'https://app.sellerchamp.com/products';
 
 app.get('/api/config', (req,res)=>res.json({pinRequired:!!process.env.APP_PIN, authenticated:authValid(req), duplicateReady:!!(process.env.SC_SHIP_FROM_ADDRESS_ID && process.env.SC_EBAY_TEMPLATE_ID && process.env.RETURN_APP_BASE_URL)}));
 app.post('/api/pin', (req,res)=>{
@@ -140,8 +140,8 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   const r = readDb().find(x=>x.id===req.params.id); if(!r) return res.status(404).send('Return not found');
   res.setHeader('Content-Type','application/pdf'); res.setHeader('Content-Disposition',`inline; filename="return-${r.order_number||r.id}.pdf"`);
   const doc = new PDFDocument({size:'LETTER',margin:36}); doc.pipe(res);
-  doc.fontSize(20).font('Helvetica-Bold').text('RETURN PROCESSING SHEET',{align:'center'}).moveDown(.6);
-  doc.fontSize(10); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',r.original_condition); pdfText(doc,'Observed Condition:',r.observed_condition);
+  doc.fontSize(40).font('Helvetica-Bold').text('RETURN PROCESSING SHEET',{align:'center'}).moveDown(.6);
+  doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',r.original_condition); pdfText(doc,'Observed Condition:',r.observed_condition);
   pdfText(doc,'Front-of-House Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
   doc.moveDown(.4).font('Helvetica-Bold').text('Instructions / Notes'); doc.font('Helvetica').text(r.notes||'None',{width:540}).moveDown(.7);
   const files = r.photos.slice(0,6).map(p=>path.join(UPLOAD_DIR,path.basename(p))).filter(fs.existsSync);
@@ -151,7 +151,7 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
     doc.y = y+h+16;
   }
   if(doc.y>650) doc.addPage();
-  doc.moveDown(.5).fontSize(12).font('Helvetica-Bold').text('ITEM LOCATION',{align:'center'}); doc.fontSize(34).text(r.location||'NO LOCATION',{align:'center'}); doc.end();
+  doc.moveDown(.5).fontSize(24).font('Helvetica-Bold').text('ITEM LOCATION',{align:'center'}); doc.fontSize(68).text(r.location||'NO LOCATION',{align:'center'}); doc.end();
 });
 
 async function getProductAndInventory(r){
