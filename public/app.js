@@ -198,7 +198,7 @@ function directCondition(p){
 function renderDirect(p){
   const locs=(p.locations||[]);
   const rows=locs.length?locs.map((x,i)=>`<div class="card"><div class="meta"><div><b>Location:</b> ${esc(x.location||'NO LOCATION')}</div><div><b>Quantity at this location:</b> ${esc(x.quantity_available)}</div></div><label>Adjust quantity at ${esc(x.location||'this location')}</label><div class="row"><input id="directQty${i}" type="number" inputmode="numeric" min="0" value="${esc(x.quantity_available)}"><button onclick="updateDirectQty(${i})">Update Quantity</button></div></div>`).join(''):`<div class="card"><p>No inventory locations are currently assigned.</p><label>Location</label><input id="directNewLoc"><label>Quantity</label><input id="directNewQty" type="number" inputmode="numeric" min="0" value="0"><button onclick="addDirectLocation()">Set Quantity</button></div>`;
-  $('#directResult').innerHTML=`<div class="card"><h2>${esc(p.sku)}</h2><div class="meta"><div><b>Location:</b> ${esc(locs.map(x=>x.location).filter(Boolean).join(', ')||'NO LOCATION')}</div><div><b>Title:</b> ${esc(p.title)}</div><div><b>Quantity On Hand:</b> ${esc(p.quantity_on_hand)}</div><div><b>Quantity In Reserve:</b> ${esc(p.reserve_quantity)}</div><div><b>eBay Condition:</b> ${esc(directCondition(p))} - ${esc(p.item_remarks||'No Item Remarks')}</div></div></div>${rows}`;
+  $('#directResult').innerHTML=`<div class="card"><h2>${esc(p.sku)}</h2><div class="meta"><div><b>Location:</b> ${esc(locs.map(x=>x.location).filter(Boolean).join(', ')||'NO LOCATION')}</div><div><b>Title:</b> ${esc(p.title)}</div><div><b>Status:</b> ${esc(String(p.marketplace_status||'unknown').toUpperCase())} ${String(p.marketplace_status||'').toLowerCase()!=='active'?`<button class="secondary" onclick="activateDirectProduct()">Activate Item</button>`:''}</div><div><b>Quantity On Hand:</b> ${esc(p.quantity_on_hand)}</div><div><b>Quantity In Reserve:</b> ${esc(p.reserve_quantity)}</div><div><b>eBay Condition:</b> ${esc(directCondition(p))} - ${esc(p.item_remarks||'No Item Remarks')}</div></div></div>${rows}`;
 }
 window.updateDirectQty=async i=>{
   const row=directProduct.locations[i], qty=$(`#directQty${i}`).value;
@@ -226,7 +226,7 @@ async function searchDirectAlternate(type){
     const rows=j.results||[];
     if(!rows.length){$('#directChoices').innerHTML='';$('#directAltError').textContent='No matching SellerChamp products found.';return}
     if(rows.length===1){await chooseDirectProduct(rows[0].id);return}
-    $('#directChoices').innerHTML=`<div class="card"><h3>${rows.length} matches — choose the correct item</h3>${rows.map(r=>`<div class="queue-row"><div><b>${esc(r.sku)}</b><br>${esc(r.title)}${r.upc?`<br><span class="hint">UPC: ${esc(r.upc)}</span>`:''}<br><span class="hint">${esc(directCondition(r))} - ${esc(r.item_remarks||'No Item Remarks')}</span></div><button onclick="chooseDirectProduct('${r.id}')">Select</button></div>`).join('')}</div>`;
+    $('#directChoices').innerHTML=`<div class="card"><h3>${rows.length} matches — choose the correct item</h3>${rows.map(r=>`<div class="queue-row"><div><b>${esc(r.sku)}</b><br>${esc(r.title)}${r.upc?`<br><span class="hint">UPC: ${esc(r.upc)}</span>`:''}<br><span class="hint"><b>Status:</b> ${esc(String(r.marketplace_status||'unknown').toUpperCase())}</span><br><span class="hint">${esc(directCondition(r))} - ${esc(r.item_remarks||'No Item Remarks')}</span></div><button onclick="chooseDirectProduct('${r.id}')">Select</button></div>`).join('')}</div>`;
   }catch(e){$('#directChoices').innerHTML='';$('#directAltError').textContent=e.message}
 }
 window.chooseDirectProduct=async id=>{
@@ -234,4 +234,17 @@ window.chooseDirectProduct=async id=>{
     $('#directChoices').innerHTML='<div class="card">Loading product…</div>';
     const j=await api('/api/direct/product/'+encodeURIComponent(id));directProduct=j.product;$('#directChoices').innerHTML='';renderDirect(directProduct);
   }catch(e){$('#directChoices').innerHTML='';$('#directAltError').textContent=e.message}
+};
+
+
+window.activateDirectProduct=async()=>{
+  if(!directProduct)return;
+  if(!confirm(`Activate ${directProduct.sku} on eBay through SellerChamp?`))return;
+  try{
+    const btn=event?.target; if(btn){btn.disabled=true;btn.textContent='Activating…'}
+    const j=await api(`/api/direct/product/${directProduct.id}/activate`,{method:'POST'});
+    const refreshed=await api('/api/direct/product/'+encodeURIComponent(directProduct.id));
+    directProduct=refreshed.product; renderDirect(directProduct);
+    alert(`Activation request completed. Current SellerChamp status: ${String(j.marketplace_status||directProduct.marketplace_status||'unknown').toUpperCase()}.`);
+  }catch(e){alert(e.message);renderDirect(directProduct)}
 };

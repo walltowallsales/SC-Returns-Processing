@@ -159,16 +159,28 @@ app.get('/api/direct/search', async(req,res)=>{
   try{
     const type=String(req.query.type||'').toLowerCase(), q=String(req.query.q||'').trim();
     if(!q||!['upc','title'].includes(type))return res.status(400).json({error:'Enter a search value'});
-    const param=type==='upc'?`upc=${encodeURIComponent(q)}`:`title=${encodeURIComponent(q)}`;
-    let found=await sc(`/api/products?${param}&page=1&page_size=100`);
-    let products=found.products||[];
-    // SellerChamp installations can differ in supported filters; fall back to general query.
-    if(!products.length){
-      try{found=await sc(`/api/products?query=${encodeURIComponent(q)}&page=1&page_size=100`);products=found.products||[]}catch{}
+    let products=[];
+    if(type==='upc'){
+      const found=await sc(`/api/products?upc=${encodeURIComponent(q)}&page=1&page_size=100`);
+      products=found.products||[];
+      if(!products.length){try{const f=await sc(`/api/products?query=${encodeURIComponent(q)}&page=1&page_size=100`);products=f.products||[]}catch{}}
+      const digits=q.replace(/\D/g,'');
+      products=products.filter(p=>String(p.upc||p.product_upc||p.barcode||'').replace(/\D/g,'')===digits || !String(p.upc||p.product_upc||p.barcode||''));
+    }else{
+      // Do not depend on a SellerChamp "title=" API filter. Search the product catalog
+      // page-by-page and perform a case-insensitive title match here.
+      const words=q.toLowerCase().split(/\s+/).filter(Boolean);
+      for(let page=1;page<=20 && products.length<50;page++){
+        const f=await sc(`/api/products?page=${page}&page_size=100`);
+        const batch=f.products||[];
+        products.push(...batch.filter(p=>{
+          const title=String(p.title||'').toLowerCase();
+          return words.every(w=>title.includes(w));
+        }));
+        if(batch.length<100)break;
+      }
     }
-    if(type==='upc') products=products.filter(p=>String(p.upc||p.product_upc||p.barcode||'').replace(/\D/g,'')===q.replace(/\D/g,'') || !String(p.upc||p.product_upc||p.barcode||''));
-    if(type==='title') products=products.filter(p=>String(p.title||'').toLowerCase().includes(q.toLowerCase()));
-    const results=products.slice(0,50).map(p=>({id:p.id,sku:p.sku||'',title:p.title||'',upc:p.upc||p.product_upc||p.barcode||'',item_condition:p.item_condition??'',ebay_item_condition_id:p.ebay_item_condition_id??p.item_condition_id??'',item_remarks:p.item_remarks||''}));
+    const results=products.slice(0,50).map(p=>({id:p.id,sku:p.sku||'',title:p.title||'',upc:p.upc||p.product_upc||p.barcode||'',item_condition:p.item_condition??'',ebay_item_condition_id:p.ebay_item_condition_id??p.item_condition_id??'',item_remarks:p.item_remarks||'',marketplace_status:String(p.marketplace_status||p.status||'unknown').toLowerCase()}));
     res.json({results});
   }catch(e){res.status(500).json({error:e.message})}
 });
@@ -177,7 +189,7 @@ app.get('/api/direct/product/:productId', async(req,res)=>{
     let product; const full=await sc(`/api/products/${req.params.productId}`); product=full.product||full;
     let inv=[]; try{inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[]}catch{}
     const locations=inv.map(x=>({id:x.id,location:x.location||'',quantity_available:Number(x.quantity_available||0),priority:x.priority||1,delete_if_empty:x.delete_if_empty!==false}));
-    res.json({product:{id:product.id,sku:product.sku,title:product.title||'',item_condition:product.item_condition??'',ebay_item_condition_id:product.ebay_item_condition_id??product.item_condition_id??'',item_remarks:product.item_remarks||'',reserve_quantity:Number(product.reserve_quantity||0),locations,quantity_on_hand:locations.reduce((n,x)=>n+x.quantity_available,0)}});
+    res.json({product:{id:product.id,sku:product.sku,title:product.title||'',item_condition:product.item_condition??'',ebay_item_condition_id:product.ebay_item_condition_id??product.item_condition_id??'',item_remarks:product.item_remarks||'',reserve_quantity:Number(product.reserve_quantity||0),locations,quantity_on_hand:locations.reduce((n,x)=>n+x.quantity_available,0),marketplace_status:String(product.marketplace_status||product.status||'unknown').toLowerCase()}});
   }catch(e){res.status(500).json({error:e.message})}
 });
 
@@ -191,9 +203,18 @@ app.get('/api/direct/sku/:sku', async(req,res)=>{
     let inv=[]; try{inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[]}catch{}
     const locations=inv.map(x=>({id:x.id,location:x.location||'',quantity_available:Number(x.quantity_available||0),priority:x.priority||1,delete_if_empty:x.delete_if_empty!==false}));
     const qtyOnHand=locations.reduce((n,x)=>n+x.quantity_available,0);
-    res.json({product:{id:product.id,sku:product.sku,title:product.title||'',item_condition:product.item_condition??'',ebay_item_condition_id:product.ebay_item_condition_id??product.item_condition_id??'',item_remarks:product.item_remarks||'',reserve_quantity:Number(product.reserve_quantity||0),reserve_quantity_location:product.reserve_quantity_location||'',locations,quantity_on_hand:qtyOnHand}});
+    res.json({product:{id:product.id,sku:product.sku,title:product.title||'',item_condition:product.item_condition??'',ebay_item_condition_id:product.ebay_item_condition_id??product.item_condition_id??'',item_remarks:product.item_remarks||'',reserve_quantity:Number(product.reserve_quantity||0),reserve_quantity_location:product.reserve_quantity_location||'',locations,quantity_on_hand:qtyOnHand,marketplace_status:String(product.marketplace_status||product.status||'unknown').toLowerCase()}});
   }catch(e){res.status(500).json({error:e.message})}
 });
+app.post('/api/direct/product/:productId/activate', async(req,res)=>{
+  try{
+    const productId=req.params.productId;
+    await sc(`/api/products/${productId}/relist`,{method:'POST'});
+    const refreshed=await freshProduct(productId);
+    res.json({ok:true,marketplace_status:String(refreshed.marketplace_status||refreshed.status||'unknown').toLowerCase()});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.post('/api/direct/product/:productId/quantity', async(req,res)=>{
   try{
     const productId=req.params.productId, loc=String(req.body.location||'').trim(), qty=Number(req.body.quantity);

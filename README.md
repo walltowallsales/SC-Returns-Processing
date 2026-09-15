@@ -157,3 +157,15 @@ PDF-only wording/formatting changes:
 - Tab 4 now supports full/partial SellerChamp title search.
 - When UPC/title search returns multiple products, the app shows SKU, title, UPC, condition and item remarks so the correct product can be selected.
 - Selecting a result loads the same Add Direct inventory report and quantity-adjustment controls as SKU search.
+
+
+## V2-14
+- Reworked Tab 4 title search so it no longer depends on SellerChamp accepting a `title=` filter. It searches catalog pages and matches all entered title words case-insensitively.
+- SKU, UPC, and Title results now report marketplace item Status (ACTIVE/INACTIVE when SellerChamp supplies it).
+- Multiple title/UPC choices also display status before selection.
+
+
+## V2-15
+- Tab 4 now shows an **Activate Item** button whenever the selected product's SellerChamp marketplace status is not active.
+- Activation uses the same SellerChamp product relist endpoint already used by the Returns processing workflow.
+- Requires confirmation, then refreshes the product and displays SellerChamp's current status.
