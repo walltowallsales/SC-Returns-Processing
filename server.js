@@ -188,6 +188,12 @@ app.delete('/api/returns/archive/purge-older-than-60-days', (req,res)=>{
 app.get('/api/returns/:id', (req,res)=>{ const r=readDb().find(x=>x.id===req.params.id); if(!r) return res.status(404).json({error:'Return not found'}); res.json({return:r}); });
 
 function pdfText(doc,label,value){ doc.font('Helvetica-Bold').text(label,{continued:true}); doc.font('Helvetica').text(` ${value||''}`); }
+function pdfUnderlinedText(doc,label,value){
+  const y=doc.y, x=doc.x, text=`${label} ${value||''}`;
+  doc.font('Helvetica').text(text);
+  const w=Math.min(doc.widthOfString(text),540);
+  doc.moveTo(x,y+doc.currentLineHeight()).lineTo(x+w,y+doc.currentLineHeight()).stroke();
+}
 app.get('/api/returns/:id/pdf', (req,res)=>{
   const r = readDb().find(x=>x.id===req.params.id); if(!r) return res.status(404).send('Return not found');
   res.setHeader('Content-Type','application/pdf'); res.setHeader('Content-Disposition',`inline; filename="return-${r.order_number||r.id}.pdf"`);
@@ -196,12 +202,16 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   doc.font('Helvetica-Bold').fontSize(32).text('RETURN PROCESSING SHEET',36,36,{width:540,align:'center'});
   doc.x=36;
   doc.y=82;
-  doc.x=36; doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Item Remarks Description:',r.item_remarks||'');
+  doc.x=36; doc.fontSize(20); pdfText(doc,'Order:',r.order_number); pdfText(doc,'SKU:',r.sku); pdfText(doc,'Title:',r.title); pdfText(doc,'Qty Returned:',r.returned_qty); pdfText(doc,'Original Condition:',conditionName(r.original_condition)); pdfText(doc,'Original Item Remarks Description:',r.item_remarks||'');
   doc.moveDown(.6);
-  pdfText(doc,'Observed Condition:',r.observed_condition);
+  pdfUnderlinedText(doc,'Observed Condition:',r.observed_condition);
   doc.moveDown(.6);
-  pdfText(doc,'Front-of-House Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
-  doc.moveDown(.4).font('Helvetica-Bold').text('Instructions / Notes'); doc.font('Helvetica-Bold').text(r.notes||'None',{width:540}).moveDown(.7);
+  pdfText(doc,'Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
+  doc.moveDown(.4).font('Helvetica').text('Instructions');
+  const notesY=doc.y, notesX=doc.x, notesText=String(r.notes||'None');
+  doc.font('Helvetica').text(notesText,{width:540});
+  doc.moveTo(notesX,notesY+doc.currentLineHeight()).lineTo(notesX+Math.min(doc.widthOfString(notesText),540),notesY+doc.currentLineHeight()).stroke();
+  doc.moveDown(.7);
   const files = r.photos.slice(0,6).map(p=>path.join(UPLOAD_DIR,path.basename(p))).filter(fs.existsSync);
   if(files.length){
     doc.font('Helvetica-Bold').text('Return Photos').moveDown(.3); let x=36, y=doc.y, w=168, h=120;

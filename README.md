@@ -101,3 +101,12 @@ The 60-day cleanup is manual only; records are not automatically deleted.
 - If the existing return is permanently deleted, that Order ID becomes eligible again.
 - Removed the dedicated 8880 delete PIN from Process Returns.
 - Delete now uses a clear permanent-delete confirmation to protect against accidental taps.
+
+
+## V2-6
+PDF-only wording/formatting changes:
+- `Item Remarks Description` → `Original Item Remarks Description`.
+- `Front-of-House Decision` → `Decision`.
+- `Instructions / Notes` → `Instructions`.
+- Instructions content is no longer bold and is underlined.
+- Observed Condition line/content is underlined.
