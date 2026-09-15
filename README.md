@@ -145,3 +145,15 @@ PDF-only wording/formatting changes:
 - 4. Add Direct SKU field now requests the numeric keypad on mobile.
 - Added a separate `Speak SKU` microphone button, matching the Return Intake approach.
 - Spoken SKU digits are inserted into the field and searched automatically.
+
+
+## V2-12
+- Added Cancel Listening on tabs 1 and 4.
+- Cancel immediately stops voice recognition and focuses the numeric field so typing can begin.
+
+
+## V2-13
+- Tab 4 now supports SellerChamp UPC search.
+- Tab 4 now supports full/partial SellerChamp title search.
+- When UPC/title search returns multiple products, the app shows SKU, title, UPC, condition and item remarks so the correct product can be selected.
+- Selecting a result loads the same Add Direct inventory report and quantity-adjustment controls as SKU search.

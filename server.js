@@ -155,6 +155,32 @@ app.post('/api/returns', upload.array('photos',6), (req,res)=>{
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
+app.get('/api/direct/search', async(req,res)=>{
+  try{
+    const type=String(req.query.type||'').toLowerCase(), q=String(req.query.q||'').trim();
+    if(!q||!['upc','title'].includes(type))return res.status(400).json({error:'Enter a search value'});
+    const param=type==='upc'?`upc=${encodeURIComponent(q)}`:`title=${encodeURIComponent(q)}`;
+    let found=await sc(`/api/products?${param}&page=1&page_size=100`);
+    let products=found.products||[];
+    // SellerChamp installations can differ in supported filters; fall back to general query.
+    if(!products.length){
+      try{found=await sc(`/api/products?query=${encodeURIComponent(q)}&page=1&page_size=100`);products=found.products||[]}catch{}
+    }
+    if(type==='upc') products=products.filter(p=>String(p.upc||p.product_upc||p.barcode||'').replace(/\D/g,'')===q.replace(/\D/g,'') || !String(p.upc||p.product_upc||p.barcode||''));
+    if(type==='title') products=products.filter(p=>String(p.title||'').toLowerCase().includes(q.toLowerCase()));
+    const results=products.slice(0,50).map(p=>({id:p.id,sku:p.sku||'',title:p.title||'',upc:p.upc||p.product_upc||p.barcode||'',item_condition:p.item_condition??'',ebay_item_condition_id:p.ebay_item_condition_id??p.item_condition_id??'',item_remarks:p.item_remarks||''}));
+    res.json({results});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+app.get('/api/direct/product/:productId', async(req,res)=>{
+  try{
+    let product; const full=await sc(`/api/products/${req.params.productId}`); product=full.product||full;
+    let inv=[]; try{inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[]}catch{}
+    const locations=inv.map(x=>({id:x.id,location:x.location||'',quantity_available:Number(x.quantity_available||0),priority:x.priority||1,delete_if_empty:x.delete_if_empty!==false}));
+    res.json({product:{id:product.id,sku:product.sku,title:product.title||'',item_condition:product.item_condition??'',ebay_item_condition_id:product.ebay_item_condition_id??product.item_condition_id??'',item_remarks:product.item_remarks||'',reserve_quantity:Number(product.reserve_quantity||0),locations,quantity_on_hand:locations.reduce((n,x)=>n+x.quantity_available,0)}});
+  }catch(e){res.status(500).json({error:e.message})}
+});
+
 app.get('/api/direct/sku/:sku', async(req,res)=>{
   try{
     const sku=String(req.params.sku||'').trim(); if(!sku)return res.status(400).json({error:'Enter a SKU'});

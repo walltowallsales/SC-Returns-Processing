@@ -4,11 +4,12 @@ function formatOrder(v){const d=String(v).replace(/\D/g,'').slice(0,12);if(d.len
 async function api(url,opt={}){const r=await fetch(url,opt),j=await r.json().catch(()=>({error:'Unexpected response'}));if(r.status===401&&j.pin_required){$('#pinGate').classList.remove('hidden');throw new Error('Enter the app PIN to continue.')}if(!r.ok)throw new Error(j.error||'Request failed');return j}
 $('#orderInput').addEventListener('input',e=>e.target.value=formatOrder(e.target.value));
 
+let orderSpeechRecognition=null;
 $('#speakOrder').onclick=()=>{
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){alert('Direct voice recognition is not available in this browser. The number-pad entry will continue to work normally.');return;}
-  const r=new SR(); r.lang='en-US'; r.interimResults=false; r.maxAlternatives=3;
-  $('#speakOrder').textContent='🎤 Listening…';
+  const r=new SR(); orderSpeechRecognition=r; r.lang='en-US'; r.interimResults=false; r.maxAlternatives=3;
+  $('#speakOrder').textContent='🎤 Listening…'; $('#cancelSpeakOrder').classList.remove('hidden');
   r.onresult=e=>{
     const spoken=Array.from(e.results[0]||[]).map(x=>x.transcript).join(' ');
     let d=String(spoken).replace(/\b(zero|oh)\b/gi,'0').replace(/\bone\b/gi,'1').replace(/\btwo\b/gi,'2').replace(/\bthree\b/gi,'3').replace(/\bfour\b/gi,'4').replace(/\bfive\b/gi,'5').replace(/\bsix\b/gi,'6').replace(/\bseven\b/gi,'7').replace(/\beight\b/gi,'8').replace(/\bnine\b/gi,'9').replace(/\D/g,'').slice(0,12);
@@ -16,13 +17,14 @@ $('#speakOrder').onclick=()=>{
     if(d.length!==12) $('#orderError').textContent='I heard '+d.length+' digits. Please check the order number before searching.';
   };
   r.onerror=e=>{if(e.error!=='aborted')$('#orderError').textContent='Voice recognition did not get the order number. Please try again or use the number pad.'};
-  r.onend=()=>$('#speakOrder').textContent='🎤 Speak Order';
+  r.onend=()=>{$('#speakOrder').textContent='🎤 Speak Order';$('#cancelSpeakOrder').classList.add('hidden');orderSpeechRecognition=null};
   try{r.start()}catch(e){$('#speakOrder').textContent='🎤 Speak Order'}
 };
 
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');if(b.dataset.tab==='back')loadQueue();if(b.dataset.tab==='archived')loadArchive()});
 (async()=>{try{const c=await api('/api/config');if(c.pinRequired&&!c.authenticated)$('#pinGate').classList.remove('hidden')}catch(e){$('#pinGate').classList.remove('hidden')}})();
 $('#pinForm').onsubmit=async e=>{e.preventDefault();const j=await api('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:$('#pin').value})});if(j.ok){$('#pinError').textContent='';$('#pinGate').classList.add('hidden')}else $('#pinError').textContent='Incorrect PIN'};
+$('#cancelSpeakOrder').onclick=()=>{if(orderSpeechRecognition){try{orderSpeechRecognition.abort()}catch{}}$('#cancelSpeakOrder').classList.add('hidden');$('#speakOrder').textContent='🎤 Speak Order';$('#orderInput').focus();};
 $('#findOrder').onclick=async()=>{
   try{
     $('#orderError').textContent=''; $('#orderResults').innerHTML='<div class="card">Checking…</div>';
@@ -157,11 +159,12 @@ window.doDuplicate=async id=>{if(!confirm('This will create and auto-submit a ne
 
 let directProduct=null;
 $('#directSearch').onclick=searchDirectSku;
+let directSpeechRecognition=null;
 $('#directSpeak').onclick=()=>{
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){alert('Direct voice recognition is not available in this browser. The number-pad entry will continue to work normally.');return;}
-  const r=new SR(); r.lang='en-US'; r.interimResults=false; r.maxAlternatives=3;
-  $('#directSpeak').textContent='🎤 Listening…';
+  const r=new SR(); directSpeechRecognition=r; r.lang='en-US'; r.interimResults=false; r.maxAlternatives=3;
+  $('#directSpeak').textContent='🎤 Listening…'; $('#cancelDirectSpeak').classList.remove('hidden');
   r.onresult=e=>{
     const spoken=Array.from(e.results[0]||[]).map(x=>x.transcript).join(' ');
     const d=String(spoken).replace(/\b(zero|oh)\b/gi,'0').replace(/\bone\b/gi,'1').replace(/\btwo\b/gi,'2').replace(/\bthree\b/gi,'3').replace(/\bfour\b/gi,'4').replace(/\bfive\b/gi,'5').replace(/\bsix\b/gi,'6').replace(/\bseven\b/gi,'7').replace(/\beight\b/gi,'8').replace(/\bnine\b/gi,'9').replace(/\D/g,'');
@@ -169,10 +172,11 @@ $('#directSpeak').onclick=()=>{
     if(d) searchDirectSku();
   };
   r.onerror=e=>{if(e.error!=='aborted')$('#directError').textContent='Voice recognition did not get the SKU. Please try again or use the number pad.'};
-  r.onend=()=>$('#directSpeak').textContent='🎤 Speak SKU';
+  r.onend=()=>{$('#directSpeak').textContent='🎤 Speak SKU';$('#cancelDirectSpeak').classList.add('hidden');directSpeechRecognition=null};
   try{r.start()}catch(e){$('#directSpeak').textContent='🎤 Speak SKU'}
 };
 
+$('#cancelDirectSpeak').onclick=()=>{if(directSpeechRecognition){try{directSpeechRecognition.abort()}catch{}}$('#cancelDirectSpeak').classList.add('hidden');$('#directSpeak').textContent='🎤 Speak SKU';$('#directSku').focus();};
 $('#directSku').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchDirectSku()}});
 async function searchDirectSku(){
   const sku=$('#directSku').value.trim();
@@ -206,4 +210,28 @@ window.addDirectLocation=async()=>{
   if(!loc)return alert('Enter a location.');
   if(!confirm(`Set ${loc} quantity to ${qty}?`))return;
   try{await api(`/api/direct/product/${directProduct.id}/quantity`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:loc,quantity:qty})});await searchDirectSku()}catch(e){alert(e.message)}
+};
+
+
+$('#directUpcSearch').onclick=()=>searchDirectAlternate('upc');
+$('#directTitleSearch').onclick=()=>searchDirectAlternate('title');
+$('#directUpc').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchDirectAlternate('upc')}});
+$('#directTitle').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchDirectAlternate('title')}});
+async function searchDirectAlternate(type){
+  const q=(type==='upc'?$('#directUpc'):$('#directTitle')).value.trim();
+  if(!q)return;
+  $('#directAltError').textContent='';$('#directResult').innerHTML='';$('#directChoices').innerHTML='<div class="card">Searching SellerChamp…</div>';
+  try{
+    const j=await api(`/api/direct/search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
+    const rows=j.results||[];
+    if(!rows.length){$('#directChoices').innerHTML='';$('#directAltError').textContent='No matching SellerChamp products found.';return}
+    if(rows.length===1){await chooseDirectProduct(rows[0].id);return}
+    $('#directChoices').innerHTML=`<div class="card"><h3>${rows.length} matches — choose the correct item</h3>${rows.map(r=>`<div class="queue-row"><div><b>${esc(r.sku)}</b><br>${esc(r.title)}${r.upc?`<br><span class="hint">UPC: ${esc(r.upc)}</span>`:''}<br><span class="hint">${esc(directCondition(r))} - ${esc(r.item_remarks||'No Item Remarks')}</span></div><button onclick="chooseDirectProduct('${r.id}')">Select</button></div>`).join('')}</div>`;
+  }catch(e){$('#directChoices').innerHTML='';$('#directAltError').textContent=e.message}
+}
+window.chooseDirectProduct=async id=>{
+  try{
+    $('#directChoices').innerHTML='<div class="card">Loading product…</div>';
+    const j=await api('/api/direct/product/'+encodeURIComponent(id));directProduct=j.product;$('#directChoices').innerHTML='';renderDirect(directProduct);
+  }catch(e){$('#directChoices').innerHTML='';$('#directAltError').textContent=e.message}
 };
