@@ -279,3 +279,10 @@ PDF-only wording/formatting changes:
 - Signal draft now starts with only `(SKU-[SKU]) (Loc-[location])`, leaving the rest of the editable box for the user's message.
 - The same `Signal to Send` editable dialog now appears after `Quantity Is Correct — Complete & Archive`.
 - `Copy Message & Open Signal` behavior is unchanged.
+
+
+## V2-34
+- Fixed `Can't find variable: r` after `Add to Inventory & Complete`.
+- V2-33 referenced a return variable that is not in scope when the post-inventory action buttons are rendered.
+- Both completion buttons now obtain the SKU from their successful server response instead.
+- Signal draft remains `(SKU-[SKU]) (Loc-[location])`.
