@@ -286,3 +286,10 @@ PDF-only wording/formatting changes:
 - V2-33 referenced a return variable that is not in scope when the post-inventory action buttons are rendered.
 - Both completion buttons now obtain the SKU from their successful server response instead.
 - Signal draft remains `(SKU-[SKU]) (Loc-[location])`.
+
+
+## V2-35
+- Signal draft now starts `SKU-[SKU] -- Loc-[location] -- [Product Title] -- ` on both normal archive and relist/archive paths.
+- Process Returns queue keeps location visible, adds the SKU, and makes the SKU a clickable link to the saved SellerChamp product page.
+- Process Returns queue shows the first front-of-house return photo as a thumbnail when available.
+- The SKU in the opened return detail is also clickable to the same SellerChamp product page.

@@ -76,7 +76,7 @@ window.showArchived=async id=>{
   try{
     const r=(await api('/api/returns/'+id)).return;
     const hist=(r.history||[]).slice().reverse().map(h=>`<div class="history-row"><b>${esc(when(h.at))}</b><br>${esc(h.action||'')}<br><span class="hint">${esc(h.details||'')}</span></div>`).join('')||'<p>No processing history recorded.</p>';
-    $('#archiveDetail').innerHTML=`<div class="card"><div class="row spread"><div><h2>${esc(r.title)}</h2><span class="badge">ARCHIVED</span></div><div class="hint">${esc(when(r.archived_at))}</div></div><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty Returned:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Original Condition:</b> ${esc(r.original_condition)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front Decision:</b> ${esc(dispositionLabel(r.disposition))}</div><div><b>Status:</b> Archived</div></div><h3>Instructions / Notes</h3><p>${esc(r.notes||'None')}</p><div class="photos">${(r.photos||[]).map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sku?`<a target="_blank" href="https://app2.sellerchamp.com/products?utf8=%E2%9C%93&listings_filter=all&product%5Bmarketplace_manually_removed%5D=false&product%5Bquery%5D=${encodeURIComponent(r.sku)}&product%5Bquery_comparison%5D=&product%5Bquery_field%5D=&product%5Bstatus%5D=&product%5Bitem_condition%5D=all&per_page=50">View in SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div><div class="row"><button class="secondary" onclick="restoreArchived('${r.id}')">Move Back to Process Returns</button><button class="danger" onclick="deleteArchived('${r.id}')">Delete Archived Record</button></div></div><div class="card"><h2>Processing History</h2>${hist}</div>`;
+    $('#archiveDetail').innerHTML=`<div class="card"><div class="row spread"><div><h2>${esc(r.title)}</h2><span class="badge">ARCHIVED</span></div><div class="hint">${esc(when(r.archived_at))}</div></div><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}"><b>${esc(r.sku)}</b></a>`:esc(r.sku)}</div><div><b>Qty Returned:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Original Condition:</b> ${esc(r.original_condition)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front Decision:</b> ${esc(dispositionLabel(r.disposition))}</div><div><b>Status:</b> Archived</div></div><h3>Instructions / Notes</h3><p>${esc(r.notes||'None')}</p><div class="photos">${(r.photos||[]).map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sku?`<a target="_blank" href="https://app2.sellerchamp.com/products?utf8=%E2%9C%93&listings_filter=all&product%5Bmarketplace_manually_removed%5D=false&product%5Bquery%5D=${encodeURIComponent(r.sku)}&product%5Bquery_comparison%5D=&product%5Bquery_field%5D=&product%5Bstatus%5D=&product%5Bitem_condition%5D=all&per_page=50">View in SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div><div class="row"><button class="secondary" onclick="restoreArchived('${r.id}')">Move Back to Process Returns</button><button class="danger" onclick="deleteArchived('${r.id}')">Delete Archived Record</button></div></div><div class="card"><h2>Processing History</h2>${hist}</div>`;
     $('#archiveDetail').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){$('#archiveDetail').innerHTML=`<div class="card error">${esc(e.message)}</div>`}
 };
@@ -105,7 +105,7 @@ $('#purgeArchive').onclick=async()=>{
 };
 
 $('#refreshQueue').onclick=loadQueue;
-async function loadQueue(){try{const j=await api('/api/returns');$('#queue').innerHTML=j.returns.length?j.returns.map(r=>`<div class="queue-row"><strong>${esc(r.location||'NO LOC')}</strong><div><b>Order: ${esc(r.order_number)}</b><br><b>${esc(r.sku)}</b><br>${esc(r.title)}<br><span class="badge">${esc(r.disposition)}</span></div><div class="row"><button onclick="showReturn('${r.id}')">Open</button><button class="danger" onclick="deleteReturn('${r.id}','${esc(r.sku)}')">Delete</button></div></div>`).join(''):'<p>No returns waiting.</p>'}catch(e){$('#queue').innerHTML=`<p class="error">${esc(e.message)}</p>`}}
+async function loadQueue(){try{const j=await api('/api/returns');$('#queue').innerHTML=j.returns.length?j.returns.map(r=>`<div class="queue-row"><strong>${esc(r.location||'NO LOC')}</strong><div style="display:flex;gap:12px;align-items:flex-start">${r.photos&&r.photos[0]?`<img src="${esc(r.photos[0])}" alt="Return photo" style="width:76px;height:76px;object-fit:cover;border-radius:10px;flex:0 0 auto">`:''}<div><b>Order: ${esc(r.order_number)}</b><br>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}" style="font-weight:800">SKU: ${esc(r.sku)}</a>`:`<b>SKU: ${esc(r.sku)}</b>`}<br>${esc(r.title)}<br><span class="badge">${esc(r.disposition)}</span></div></div><div class="row"><button onclick="showReturn('${r.id}')">Open</button><button class="danger" onclick="deleteReturn('${r.id}','${esc(r.sku)}')">Delete</button></div></div>`).join(''):'<p>No returns waiting.</p>'}catch(e){$('#queue').innerHTML=`<p class="error">${esc(e.message)}</p>`}}
 
 window.deleteReturn=async(id,sku)=>{
   if(!confirm(`Delete return ${sku||''}?\n\nThis permanently deletes the return record and its stored photos. This cannot be undone.\n\nPress OK only if you intended to delete this record.`))return;
@@ -147,20 +147,22 @@ window.changeStockQty=async id=>{
 window.archiveActive=async (id,sku='')=>{
   try{
     const loc=$('#normalLoc')?.value||'';
+    const title=$('#detail h2')?.textContent?.trim()||'';
     const j=await api(`/api/returns/${id}/archive-active`,{method:'POST'});
     sku=sku||j.sku||'';
     $('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'});
-    showSignalMessage(`(SKU-${sku}) (Loc-${loc})`);
+    showSignalMessage(`SKU-${sku} -- Loc-${loc} -- ${title} -- `);
   }catch(e){$('#processMsg').textContent=e.message}
 };
 window.activateAndArchive=async (id,sku='')=>{
   try{
     $('#processMsg').textContent='Submitting eBay relist to SellerChamp…';
     const loc=$('#normalLoc')?.value||'';
+    const title=$('#detail h2')?.textContent?.trim()||'';
     const j=await api(`/api/returns/${id}/relist-and-archive`,{method:'POST'});
     sku=sku||j.sku||'';
     $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'});
-    showSignalMessage(`(SKU-${sku}) (Loc-${loc})`);
+    showSignalMessage(`SKU-${sku} -- Loc-${loc} -- ${title} -- `);
   }catch(e){$('#processMsg').textContent=e.message}
 };
 
