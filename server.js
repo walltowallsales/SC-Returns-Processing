@@ -474,7 +474,23 @@ app.post('/api/returns/:id/archive-inactive', (req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/add-reserve', async(req,res)=>{
-  try{ const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'}); const r=db[idx], qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location; await addAtLocation(product,inv,loc,qty); await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:Number(product.reserve_quantity||0)+qty,reserve_quantity_location:req.body.reserve_location||loc}})}); archiveRecord(r,'inventory_reserved',`Added ${qty} and increased reserve by ${qty}`); writeDb(db); res.json({ok:true,archived:true}); }catch(e){res.status(500).json({error:e.message});}
+  try{
+    const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id);
+    if(idx<0)return res.status(404).json({error:'Return not found'});
+    const r=db[idx], qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
+    await addAtLocation(product,inv,loc,qty);
+    const newReserve=Number(product.reserve_quantity||0)+qty;
+    await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:newReserve,reserve_quantity_location:req.body.reserve_location||loc}})});
+    // Verify inventory after both updates before archiving.
+    const verified=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+    const row=verified.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
+    const onHand=Number(row?.quantity_available||0);
+    const verifiedProduct=await freshProduct(product.id);
+    const verifiedReserve=Number(verifiedProduct?.reserve_quantity||0);
+    archiveRecord(r,'inventory_reserved',`Added ${qty} at ${loc}; SellerChamp on hand verified at ${onHand}; reserve verified at ${verifiedReserve}`);
+    writeDb(db);
+    res.json({ok:true,archived:true,sku:r.sku||'',title:r.title||'',location:loc,quantity_added:qty,quantity_available:onHand,reserve_quantity:verifiedReserve});
+  }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/duplicate', async(req,res)=>{
   try{

@@ -300,3 +300,17 @@ PDF-only wording/formatting changes:
 - Added `Open in SellerChamp` between `Open / Print PDF` and `eBay` in opened Process Returns records.
 - Queue thumbnail is now on its own line, with return text beginning underneath it.
 - Replaced the small browser confirmation for `Add to Inventory & Complete` with a large touch-friendly in-app confirmation containing a prominent `YES — ADD TO INVENTORY` button and separate Cancel button.
+
+
+## V2-37
+- `Add to inventory + reserve` now follows the normal-inventory workflow more closely.
+- Uses a large touch-friendly confirmation instead of the browser confirm dialog.
+- After SellerChamp inventory and reserve updates, the server re-reads the inventory location to verify the resulting on-hand quantity.
+- A `Completed & Verified` screen shows SKU, location, quantity added, current on-hand quantity, and resulting reserve quantity.
+- `Continue to Signal Message` opens the same editable Signal draft: `SKU-[SKU] -- Loc-[location] -- [Title] -- `.
+- The return is archived only after the SellerChamp update steps complete successfully.
+
+
+## V2-38
+- After `Add + Reserve & Complete`, the app now re-fetches the SellerChamp product and verifies the actual reserve quantity in addition to re-reading the on-hand inventory location.
+- The Completed & Verified popup reports both current on-hand quantity and the verified current reserve quantity.

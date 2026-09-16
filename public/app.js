@@ -217,7 +217,45 @@ window.leaveInactiveAndArchive=async id=>{
   if(!confirm('Leave the eBay item inactive and archive this return?'))return;
   try{ await api(`/api/returns/${id}/archive-inactive`,{method:'POST'}); $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'}); }catch(e){$('#processMsg').textContent=e.message}
 };
-window.doReserve=async id=>{if(!confirm('Add this quantity and increase SellerChamp reserve quantity?'))return;try{await api(`/api/returns/${id}/add-reserve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:$('#reserveLoc').value,reserve_location:$('#reserveNote').value,qty:$('#reserveQty').value})});alert('Completed. This return has been archived.');$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}};
+window.doReserve=id=>{
+  showReserveConfirm(async()=>{
+    try{
+      const loc=$('#reserveLoc').value, qty=$('#reserveQty').value;
+      $('#processMsg').textContent='Adding inventory, updating reserve, and verifying SellerChamp…';
+      const j=await api(`/api/returns/${id}/add-reserve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:loc,reserve_location:$('#reserveNote').value,qty})});
+      $('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'});
+      showReserveComplete(j);
+    }catch(e){$('#processMsg').textContent=e.message}
+  });
+};
+function showReserveConfirm(onConfirm){
+  const old=document.getElementById('reserveConfirmOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='reserveConfirmOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:18px';
+  overlay.innerHTML=`<div style="background:#fff;width:min(620px,100%);border-radius:22px;padding:24px;box-shadow:0 15px 50px rgba(0,0,0,.3)">
+    <div style="font-size:27px;font-weight:800;margin-bottom:14px">Add to Inventory + Reserve?</div>
+    <div style="font-size:20px;line-height:1.4;margin-bottom:22px">Add this quantity to SellerChamp inventory and increase the reserve quantity?</div>
+    <button id="reserveConfirmYes" class="primary" style="width:100%;min-height:70px;font-size:24px;font-weight:800;margin-bottom:14px">YES — ADD + RESERVE</button>
+    <button id="reserveConfirmNo" class="secondary" style="width:100%;min-height:58px;font-size:20px">Cancel</button></div>`;
+  document.body.appendChild(overlay);
+  $('#reserveConfirmNo').onclick=()=>overlay.remove();
+  $('#reserveConfirmYes').onclick=async()=>{overlay.remove();await onConfirm();};
+}
+function showReserveComplete(j){
+  const overlay=document.createElement('div');overlay.id='reserveCompleteOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:18px';
+  overlay.innerHTML=`<div style="background:#fff;width:min(620px,100%);border-radius:22px;padding:24px;box-shadow:0 15px 50px rgba(0,0,0,.3)">
+    <div style="font-size:28px;font-weight:800;margin-bottom:14px">Completed & Verified</div>
+    <div style="font-size:20px;line-height:1.5">
+      <b>SKU:</b> ${esc(j.sku||'')}<br><b>Location:</b> ${esc(j.location||'')}<br>
+      <b>Quantity added:</b> ${esc(j.quantity_added)}<br><b>Current on hand:</b> ${esc(j.quantity_available)}<br>
+      <b>Reserve quantity:</b> ${esc(j.reserve_quantity)}<br><br>
+      SellerChamp inventory and reserve were updated and the return was archived.
+    </div>
+    <button id="reserveSignalNext" class="primary" style="width:100%;min-height:68px;font-size:22px;font-weight:800;margin-top:22px">Continue to Signal Message</button></div>`;
+  document.body.appendChild(overlay);
+  $('#reserveSignalNext').onclick=()=>{overlay.remove();showSignalMessage(`SKU-${j.sku||''} -- Loc-${j.location||''} -- ${j.title||''} -- `);};
+}
 window.doDuplicate=async id=>{if(!confirm('This will create and auto-submit a new SellerChamp/eBay listing. Continue?'))return;try{await api(`/api/returns/${id}/duplicate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sku:$('#newSku').value,title:$('#newTitle').value,item_condition:$('#newCondition').value,item_remarks:$('#newRemarks').value,location:$('#newLoc').value,qty:$('#newQty').value,retail_price:$('#newPrice').value})});alert('New listing submitted. This return has been archived.');$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}};
 
 
