@@ -375,7 +375,16 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     }
     if(['completed','archived'].includes(r.status)) return res.status(409).json({error:'This return has already been processed.'});
     const qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
-    await addAtLocation(product,inv,loc,qty);
+    let catalogUpdate=null;
+    try{
+      catalogUpdate=await sc('/api/master_product_inventory_locations/update_quantities',{
+        method:'POST',
+        body:JSON.stringify({barcode:r.sku,inventory_action:'add',location:loc,quantity:qty})
+      });
+    }catch(catalogErr){
+      // Fallback for accounts/items not using Catalog Sync.
+      await addAtLocation(product,inv,loc,qty);
+    }
     let removedEmptyLocations=[];
     if(String(loc||'').trim().toLowerCase()!==String(r.location||'').trim().toLowerCase()) removedEmptyLocations=await removeOtherEmptyLocations(product,loc);
     const refreshed=await freshProduct(product.id);
@@ -385,11 +394,15 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}${removedEmptyLocations.length?`; removed empty locations: ${removedEmptyLocations.join(', ')}`:''}`});
     r.status='inventory_added_pending_listing';
     const after=await getProductAndInventory(r);
-    const afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
-    const currentQty=Number(afterRow?.quantity_available||0);
+    let afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
+    let currentQty=Number(afterRow?.quantity_available||0);
+    if(catalogUpdate?.quantity_available!==undefined) currentQty=Number(catalogUpdate.quantity_available);
+    if(!afterRow && !catalogUpdate?.success){
+      throw new Error(`SellerChamp did not confirm inventory at ${loc}. No inventory change was recorded.`);
+    }
     r.inventory_result.quantity_available=currentQty;
     writeDb(db);
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty});
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,inventory_locations:after.inv});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{

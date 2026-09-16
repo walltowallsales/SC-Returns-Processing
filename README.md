@@ -181,3 +181,9 @@ PDF-only wording/formatting changes:
 - Tab 2: if you change the return location, other locations for that SellerChamp product are removed only when their quantity is zero. Any location with stock is preserved.
 - Fixed `Activate eBay Item & Archive Return` to use SellerChamp's documented product update with `relist=true`.
 - The return is archived only after SellerChamp reports the listing ACTIVE. If activation is not confirmed, the record remains in Process Returns and the status/error is displayed.
+
+
+## V2-18
+- Fixed Tab 2 normal-inventory processing to use SellerChamp's documented Inventory Update Quantities endpoint (`master_product_inventory_locations/update_quantities`) with `inventory_action: add`, SKU/barcode, location, and quantity.
+- Keeps the older product inventory-location endpoint as a fallback for products/accounts not using Catalog Sync.
+- The app now verifies SellerChamp returned/contains the destination inventory before reporting success.
