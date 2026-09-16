@@ -134,7 +134,7 @@ window.doAdd=async id=>{
     const status=String(j.marketplace_status||'unknown').toLowerCase();
     const cleanupMsg=(j.delete_if_empty_updated||[]).map(x=>`<br><b>${esc(x)}:</b> quantity is 0; delete_if_empty set to TRUE`).join('');
     const cleanupFail=(j.failed_zero_locations||[]).map(x=>`<br><b>Could not update delete_if_empty for ${esc(x)}</b>`).join('');
-    $('#processMsg').innerHTML=`<div class="listing-warning"><b>SellerChamp confirmed the inventory update.</b>${cleanupMsg}${cleanupFail}<br><br><b>Current stock at ${esc(j.location||$('#normalLoc').value)}:</b> <span style="font-size:1.35em"><b>${esc(j.quantity_available)}</b></span><br><label>Change quantity if needed</label><div class="row"><input id="correctedStockQty" type="number" inputmode="numeric" min="0" value="${esc(j.quantity_available)}"><button class="secondary" onclick="changeStockQty('${id}')">Update Stock Quantity</button></div><br><b>eBay listing status:</b> ${esc(status.toUpperCase())}<div class="listing-actions">${status==='active'?`<button onclick="archiveActive('${id}')">Quantity Is Correct — Complete & Archive</button>`:`<button onclick="activateAndArchive('${id}')">Activate eBay Item & Archive Return</button><button class="secondary" onclick="leaveInactiveAndArchive('${id}')">Leave Inactive & Archive Return</button>`}</div></div>`;
+    $('#processMsg').innerHTML=`<div class="listing-warning"><b>SellerChamp confirmed the inventory update.</b>${cleanupMsg}${cleanupFail}<br><br><b>Current stock at ${esc(j.location||$('#normalLoc').value)}:</b> <span style="font-size:1.35em"><b>${esc(j.quantity_available)}</b></span><br><label>Change quantity if needed</label><div class="row"><input id="correctedStockQty" type="number" inputmode="numeric" min="0" value="${esc(j.quantity_available)}"><button class="secondary" onclick="changeStockQty('${id}')">Update Stock Quantity</button></div><br><b>eBay listing status:</b> ${esc(status.toUpperCase())}<div class="listing-actions">${status==='active'?`<button onclick="archiveActive('${id}','${r.sku||''}')">Quantity Is Correct — Complete & Archive</button>`:`<button onclick="activateAndArchive('${id}','${r.sku||''}')">Activate eBay Item & Archive Return</button><button class="secondary" onclick="leaveInactiveAndArchive('${id}')">Leave Inactive & Archive Return</button>`}</div></div>`;
   }catch(e){$('#processMsg').textContent=e.message}
 };
 window.changeStockQty=async id=>{
@@ -144,17 +144,23 @@ window.changeStockQty=async id=>{
     alert(`SellerChamp stock quantity is now ${j.quantity_available} at ${j.location}.`);
   }catch(e){alert(e.message)}
 };
-window.archiveActive=async id=>{
-  try{await api(`/api/returns/${id}/archive-active`,{method:'POST'});$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}
+window.archiveActive=async (id,sku='')=>{
+  try{
+    const loc=$('#normalLoc')?.value||'';
+    const j=await api(`/api/returns/${id}/archive-active`,{method:'POST'});
+    sku=sku||j.sku||'';
+    $('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'});
+    showSignalMessage(`(SKU-${sku}) (Loc-${loc})`);
+  }catch(e){$('#processMsg').textContent=e.message}
 };
 window.activateAndArchive=async (id,sku='')=>{
   try{
     $('#processMsg').textContent='Submitting eBay relist to SellerChamp…';
+    const loc=$('#normalLoc')?.value||'';
     const j=await api(`/api/returns/${id}/relist-and-archive`,{method:'POST'});
     sku=sku||j.sku||'';
     $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'});
-    const defaultMsg=`Check in 30 minutes to see if this (SKU-${sku}) is active on eBay. If it is not, relist it.`;
-    showSignalMessage(defaultMsg);
+    showSignalMessage(`(SKU-${sku}) (Loc-${loc})`);
   }catch(e){$('#processMsg').textContent=e.message}
 };
 

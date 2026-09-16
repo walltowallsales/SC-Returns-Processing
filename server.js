@@ -429,7 +429,7 @@ app.post('/api/returns/:id/archive-active', (req,res)=>{
   try{
     const db=readDb(), r=db.find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
     if(r.status!=='inventory_added_pending_listing')return res.status(409).json({error:'Inventory must be added first.'});
-    archiveRecord(r,'archived','Inventory returned; eBay listing active; quantity reviewed.'); writeDb(db); res.json({ok:true});
+    archiveRecord(r,'archived','Inventory returned; eBay listing active; quantity reviewed.'); writeDb(db); res.json({ok:true,sku:r.sku||''});
   }catch(e){res.status(500).json({error:e.message})}
 });
 

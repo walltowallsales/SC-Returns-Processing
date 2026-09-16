@@ -273,3 +273,9 @@ PDF-only wording/formatting changes:
 - `Copy Message & Open Signal` copies the edited text to the clipboard, then opens the employee's Signal contact.
 - The user can paste and send the message in Signal.
 - A Close button dismisses the dialog without opening Signal.
+
+
+## V2-33
+- Signal draft now starts with only `(SKU-[SKU]) (Loc-[location])`, leaving the rest of the editable box for the user's message.
+- The same `Signal to Send` editable dialog now appears after `Quantity Is Correct — Complete & Archive`.
+- `Copy Message & Open Signal` behavior is unchanged.
