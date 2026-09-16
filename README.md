@@ -293,3 +293,10 @@ PDF-only wording/formatting changes:
 - Process Returns queue keeps location visible, adds the SKU, and makes the SKU a clickable link to the saved SellerChamp product page.
 - Process Returns queue shows the first front-of-house return photo as a thumbnail when available.
 - The SKU in the opened return detail is also clickable to the same SellerChamp product page.
+
+
+## V2-36
+- Both Signal completion workflows now copy the editable message and open Signal generically; no recipient is preselected.
+- Added `Open in SellerChamp` between `Open / Print PDF` and `eBay` in opened Process Returns records.
+- Queue thumbnail is now on its own line, with return text beginning underneath it.
+- Replaced the small browser confirmation for `Add to Inventory & Complete` with a large touch-friendly in-app confirmation containing a prominent `YES — ADD TO INVENTORY` button and separate Cancel button.

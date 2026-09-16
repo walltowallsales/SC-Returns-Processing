@@ -105,7 +105,7 @@ $('#purgeArchive').onclick=async()=>{
 };
 
 $('#refreshQueue').onclick=loadQueue;
-async function loadQueue(){try{const j=await api('/api/returns');$('#queue').innerHTML=j.returns.length?j.returns.map(r=>`<div class="queue-row"><strong>${esc(r.location||'NO LOC')}</strong><div style="display:flex;gap:12px;align-items:flex-start">${r.photos&&r.photos[0]?`<img src="${esc(r.photos[0])}" alt="Return photo" style="width:76px;height:76px;object-fit:cover;border-radius:10px;flex:0 0 auto">`:''}<div><b>Order: ${esc(r.order_number)}</b><br>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}" style="font-weight:800">SKU: ${esc(r.sku)}</a>`:`<b>SKU: ${esc(r.sku)}</b>`}<br>${esc(r.title)}<br><span class="badge">${esc(r.disposition)}</span></div></div><div class="row"><button onclick="showReturn('${r.id}')">Open</button><button class="danger" onclick="deleteReturn('${r.id}','${esc(r.sku)}')">Delete</button></div></div>`).join(''):'<p>No returns waiting.</p>'}catch(e){$('#queue').innerHTML=`<p class="error">${esc(e.message)}</p>`}}
+async function loadQueue(){try{const j=await api('/api/returns');$('#queue').innerHTML=j.returns.length?j.returns.map(r=>`<div class="queue-row"><strong>${esc(r.location||'NO LOC')}</strong><div>${r.photos&&r.photos[0]?`<img src="${esc(r.photos[0])}" alt="Return photo" style="display:block;width:76px;height:76px;object-fit:cover;border-radius:10px;margin-bottom:10px">`:''}<div><b>Order: ${esc(r.order_number)}</b><br>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}" style="font-weight:800">SKU: ${esc(r.sku)}</a>`:`<b>SKU: ${esc(r.sku)}</b>`}<br>${esc(r.title)}<br><span class="badge">${esc(r.disposition)}</span></div></div><div class="row"><button onclick="showReturn('${r.id}')">Open</button><button class="danger" onclick="deleteReturn('${r.id}','${esc(r.sku)}')">Delete</button></div></div>`).join(''):'<p>No returns waiting.</p>'}catch(e){$('#queue').innerHTML=`<p class="error">${esc(e.message)}</p>`}}
 
 window.deleteReturn=async(id,sku)=>{
   if(!confirm(`Delete return ${sku||''}?\n\nThis permanently deletes the return record and its stored photos. This cannot be undone.\n\nPress OK only if you intended to delete this record.`))return;
@@ -116,7 +116,7 @@ window.deleteReturn=async(id,sku)=>{
   }catch(e){alert(e.message)}
 };
 
-window.showReturn=async id=>{try{const r=(await api('/api/returns/'+id)).return;let inventory='';try{const inv=await api(`/api/returns/${id}/inventory`);inventory=`<div class="card"><h3>Current SellerChamp Inventory</h3>${(inv.inv||[]).map(x=>`<div>${esc(x.location)} — <b>${esc(x.quantity_available)}</b> on hand</div>`).join('')||'<p>No locations.</p>'}</div>`}catch(e){inventory=`<div class="card error">${esc(e.message)}</div>`}$('#detail').innerHTML=`<div class="card"><h2>${esc(r.title)}</h2><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front decision:</b> ${esc(r.disposition)}</div></div><h3>Instructions</h3><p>${esc(r.notes||'None')}</p><div class="photos">${r.photos.map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div></div>${inventory}${processPanel(r)}`;try{
+window.showReturn=async id=>{try{const r=(await api('/api/returns/'+id)).return;let inventory='';try{const inv=await api(`/api/returns/${id}/inventory`);inventory=`<div class="card"><h3>Current SellerChamp Inventory</h3>${(inv.inv||[]).map(x=>`<div>${esc(x.location)} — <b>${esc(x.quantity_available)}</b> on hand</div>`).join('')||'<p>No locations.</p>'}</div>`}catch(e){inventory=`<div class="card error">${esc(e.message)}</div>`}$('#detail').innerHTML=`<div class="card"><h2>${esc(r.title)}</h2><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front decision:</b> ${esc(r.disposition)}</div></div><h3>Instructions</h3><p>${esc(r.notes||'None')}</p><div class="photos">${r.photos.map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}">Open in SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div></div>${inventory}${processPanel(r)}`;try{
   const st=await api(`/api/returns/${id}/listing-status`);
   const el=$('#normalListingStatus');
   if(el){
@@ -126,17 +126,34 @@ window.showReturn=async id=>{try{const r=(await api('/api/returns/'+id)).return;
 }catch(e){const el=$('#normalListingStatus');if(el)el.innerHTML=`<b>eBay listing status:</b> Unable to determine — ${esc(e.message)}`}
 $('#detail').scrollIntoView({behavior:'smooth',block:'start'})}catch(e){$('#detail').innerHTML=`<div class="card error">${esc(e.message)}</div>`}};
 function processPanel(r){return `<div class="card"><h2>Process Return</h2><div class="big-choice"><h3>1. Add back to normal inventory</h3><div id="normalListingStatus" class="listing-warning"><b>eBay listing status:</b> Checking…</div><input id="normalLoc" value="${esc(r.location)}"><input id="normalQty" type="number" inputmode="numeric" value="${esc(r.returned_qty)}"><button onclick="doAdd('${r.id}')">Add to Inventory & Complete</button></div><div class="big-choice"><h3>2. Add to inventory + reserve</h3><input id="reserveLoc" value="${esc(r.location)}"><input id="reserveNote" value="${esc(r.location)}"><input id="reserveQty" type="number" value="${esc(r.returned_qty)}"><button onclick="doReserve('${r.id}')">Add + Reserve & Complete</button></div><div class="big-choice"><h3>3. Create separate eBay product/listing</h3><input id="newSku" value="${esc(r.sku)}-RET"><input id="newTitle" value="${esc(r.title)}"><select id="newCondition"><option value="like_new">Like New</option><option value="very_good">Very Good</option><option value="good">Good</option><option value="acceptable">Acceptable</option><option value="refurbished">Refurbished</option><option value="salvage">Salvage</option></select><textarea id="newRemarks">${esc(r.notes)}</textarea><input id="newLoc" value="${esc(r.location)}"><input id="newQty" type="number" value="${esc(r.returned_qty)}"><input id="newPrice" type="number" step="0.01" placeholder="Price"><button onclick="doDuplicate('${r.id}')">Create & Activate Listing</button></div><p id="processMsg"></p></div>`}
-window.doAdd=async id=>{
-  if(!confirm('Add this quantity back to SellerChamp inventory?'))return;
-  try{
+window.doAdd=id=>{
+  showInventoryConfirm(async()=>{
+    try{
     $('#processMsg').textContent='Adding inventory and checking current stock…';
     const j=await api(`/api/returns/${id}/add-inventory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:$('#normalLoc').value,qty:$('#normalQty').value})});
     const status=String(j.marketplace_status||'unknown').toLowerCase();
     const cleanupMsg=(j.delete_if_empty_updated||[]).map(x=>`<br><b>${esc(x)}:</b> quantity is 0; delete_if_empty set to TRUE`).join('');
     const cleanupFail=(j.failed_zero_locations||[]).map(x=>`<br><b>Could not update delete_if_empty for ${esc(x)}</b>`).join('');
     $('#processMsg').innerHTML=`<div class="listing-warning"><b>SellerChamp confirmed the inventory update.</b>${cleanupMsg}${cleanupFail}<br><br><b>Current stock at ${esc(j.location||$('#normalLoc').value)}:</b> <span style="font-size:1.35em"><b>${esc(j.quantity_available)}</b></span><br><label>Change quantity if needed</label><div class="row"><input id="correctedStockQty" type="number" inputmode="numeric" min="0" value="${esc(j.quantity_available)}"><button class="secondary" onclick="changeStockQty('${id}')">Update Stock Quantity</button></div><br><b>eBay listing status:</b> ${esc(status.toUpperCase())}<div class="listing-actions">${status==='active'?`<button onclick="archiveActive('${id}')">Quantity Is Correct — Complete & Archive</button>`:`<button onclick="activateAndArchive('${id}')">Activate eBay Item & Archive Return</button><button class="secondary" onclick="leaveInactiveAndArchive('${id}')">Leave Inactive & Archive Return</button>`}</div></div>`;
-  }catch(e){$('#processMsg').textContent=e.message}
+    }catch(e){$('#processMsg').textContent=e.message}
+  });
 };
+
+function showInventoryConfirm(onConfirm){
+  const old=document.getElementById('inventoryConfirmOverlay'); if(old) old.remove();
+  const overlay=document.createElement('div');
+  overlay.id='inventoryConfirmOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:18px';
+  overlay.innerHTML=`<div style="background:#fff;width:min(620px,100%);border-radius:22px;padding:24px;box-shadow:0 15px 50px rgba(0,0,0,.3)">
+    <div style="font-size:27px;font-weight:800;margin-bottom:14px">Add to SellerChamp Inventory?</div>
+    <div style="font-size:20px;line-height:1.4;margin-bottom:22px">Add this quantity back to SellerChamp inventory?</div>
+    <button id="inventoryConfirmYes" class="primary" style="width:100%;min-height:70px;font-size:24px;font-weight:800;margin-bottom:14px">YES — ADD TO INVENTORY</button>
+    <button id="inventoryConfirmNo" class="secondary" style="width:100%;min-height:58px;font-size:20px">Cancel</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('inventoryConfirmNo').onclick=()=>overlay.remove();
+  document.getElementById('inventoryConfirmYes').onclick=async()=>{overlay.remove();await onConfirm();};
+}
 window.changeStockQty=async id=>{
   try{
     const j=await api(`/api/returns/${id}/set-inventory-quantity`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:$('#normalLoc').value,quantity:$('#correctedStockQty').value})});
@@ -193,7 +210,7 @@ function showSignalMessage(message){
       document.execCommand('copy');
     }
     document.getElementById('signalCopyStatus').textContent='Copied. Opening Signal…';
-    setTimeout(()=>{ window.location.href='https://signal.me/#p/+15015386504'; },250);
+    setTimeout(()=>{ window.location.href='sgnl://'; },250);
   };
 }
 window.leaveInactiveAndArchive=async id=>{
