@@ -346,25 +346,32 @@ async function addAtLocation(product, inv, loc, qty){
   return sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
 }
 async function cleanupZeroLocationsAfterMove(product, keepLocation){
-  const inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
-  const removed=[], failed=[];
-  for(const row of inv){
-    if(String(row.location||'').toLowerCase()===String(keepLocation||'').toLowerCase()) continue;
-    if(Number(row.quantity_available||0)!==0) continue;
-    try{
-      await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'DELETE'});
-      removed.push(row.location||'');
-    }catch(deleteErr){
-      try{
-        await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:0,delete_if_empty:true,priority:row.priority||1}})});
-        const check=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
-        if(!check.some(x=>String(x.id)===String(row.id))) removed.push(row.location||'');
-        else failed.push(row.location||'');
-      }catch{ failed.push(row.location||''); }
+  const initial=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+  const targets=initial.filter(row=>String(row.location||'').toLowerCase()!==String(keepLocation||'').toLowerCase() && Number(row.quantity_available||0)===0);
+  if(!targets.length) return {removed:[],failed:[],results:[]};
+  const results=[];
+  // Try bulk first for all zero rows.
+  try{
+    await sc('/api/inventory_locations/bulk_update',{method:'PUT',body:JSON.stringify({inventory_locations:targets.map(row=>({id:row.id,product_id:product.id,location:row.location,quantity_available:0,priority:row.priority||1,delete_if_empty:true}))})});
+  }catch{}
+  let check=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+  for(const row of targets){
+    if(!check.some(x=>String(x.id)===String(row.id))){
+      results.push({location:row.location||'',method:'Bulk Update',removed:true});
+      continue;
     }
+    let removed=false;
+    try{
+      await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:1,delete_if_empty:true,priority:row.priority||1}})});
+      await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:0,delete_if_empty:true,priority:row.priority||1}})});
+      const verify=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+      removed=!verify.some(x=>String(x.id)===String(row.id));
+    }catch{}
+    results.push({location:row.location||'',method:removed?'1 → 0 Delete-if-Empty':'Neither method',removed});
   }
-  return {removed,failed};
+  return {removed:results.filter(x=>x.removed).map(x=>x.location),failed:results.filter(x=>!x.removed).map(x=>x.location),results};
 }
+
 app.get('/api/returns/:id/listing-status', async(req,res)=>{
   try{
     const r=readDb().find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
@@ -404,7 +411,7 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     try{cleanup=await cleanupZeroLocationsAfterMove(product,loc)}catch{}
     if(cleanup.removed.length) r.history.push({at:now(),action:'zero_locations_removed',details:`Removed zero-quantity locations: ${cleanup.removed.join(', ')}`});
     writeDb(db);
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,before_quantity:beforeQty,expected_quantity:expectedQty,removed_zero_locations:cleanup.removed,failed_zero_locations:cleanup.failed});
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,before_quantity:beforeQty,expected_quantity:expectedQty,removed_zero_locations:cleanup.removed,failed_zero_locations:cleanup.failed,cleanup_results:cleanup.results});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{

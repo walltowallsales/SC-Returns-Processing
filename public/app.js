@@ -132,8 +132,8 @@ window.doAdd=async id=>{
     $('#processMsg').textContent='Adding inventory and checking current stock…';
     const j=await api(`/api/returns/${id}/add-inventory`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:$('#normalLoc').value,qty:$('#normalQty').value})});
     const status=String(j.marketplace_status||'unknown').toLowerCase();
-    const cleanupMsg=(j.removed_zero_locations||[]).length?`<br><b>Removed zero-quantity location(s):</b> ${esc(j.removed_zero_locations.join(', '))}`:'';
-    const cleanupFail=(j.failed_zero_locations||[]).length?`<br><b>Could not remove:</b> ${esc(j.failed_zero_locations.join(', '))}`:'';
+    const cleanupMsg=(j.cleanup_results||[]).filter(x=>x.removed).map(x=>`<br><b>Removed ${esc(x.location)} using ${esc(x.method)}</b>`).join('');
+    const cleanupFail=(j.cleanup_results||[]).filter(x=>!x.removed).map(x=>`<br><b>Could not remove ${esc(x.location)} — neither method worked</b>`).join('');
     $('#processMsg').innerHTML=`<div class="listing-warning"><b>SellerChamp confirmed the inventory update.</b>${cleanupMsg}${cleanupFail}<br><br><b>Current stock at ${esc(j.location||$('#normalLoc').value)}:</b> <span style="font-size:1.35em"><b>${esc(j.quantity_available)}</b></span><br><label>Change quantity if needed</label><div class="row"><input id="correctedStockQty" type="number" inputmode="numeric" min="0" value="${esc(j.quantity_available)}"><button class="secondary" onclick="changeStockQty('${id}')">Update Stock Quantity</button></div><br><b>eBay listing status:</b> ${esc(status.toUpperCase())}<div class="listing-actions">${status==='active'?`<button onclick="archiveActive('${id}')">Quantity Is Correct — Complete & Archive</button>`:`<button onclick="activateAndArchive('${id}')">Activate eBay Item & Archive Return</button><button class="secondary" onclick="leaveInactiveAndArchive('${id}')">Leave Inactive & Archive Return</button>`}</div></div>`;
   }catch(e){$('#processMsg').textContent=e.message}
 };

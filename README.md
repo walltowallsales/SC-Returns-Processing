@@ -193,3 +193,17 @@ PDF-only wording/formatting changes:
 - All other locations with quantity exactly 0 are removed; the destination location is always preserved and any location with quantity above 0 is never touched.
 - Cleanup first attempts an explicit inventory-location DELETE, with `delete_if_empty=true` as a fallback.
 - The Process Returns result reports which zero-quantity locations were removed and any that SellerChamp would not remove.
+
+
+## V2-23
+- Preserves the V2-21/V2-22 confirmed-working return inventory update.
+- Zero-location cleanup now first uses SellerChamp's documented `PUT /api/inventory_locations/bulk_update` endpoint with the existing inventory-location IDs and `delete_if_empty: true`.
+- If an already-zero location remains, the cleanup sets that location to quantity 1 with `delete_if_empty: true`, then sets it back to 0 so the location actually *reaches* zero while deletion-on-empty is enabled.
+- The destination location and every location with non-zero stock are excluded from cleanup.
+- The app verifies each target location is gone afterward and reports any location SellerChamp still would not remove.
+
+
+## V2-24
+- Reports the exact zero-location cleanup method that succeeded for each location.
+- Displays `Removed [location] using Bulk Update`, `Removed [location] using 1 → 0 Delete-if-Empty`, or `Could not remove [location] — neither method worked`.
+- Inventory-add behavior remains unchanged from the confirmed-working V2-21 path.
