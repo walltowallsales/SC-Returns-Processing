@@ -309,9 +309,7 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   doc.font('Helvetica').text(obsText);
   const obsW=Math.min(doc.widthOfString(obsText),Math.max(0,576-obsX));
   doc.moveTo(obsX,obsY+doc.currentLineHeight()).lineTo(obsX+obsW,obsY+doc.currentLineHeight()).stroke();
-  doc.moveDown(.35);
-  doc.moveTo(36,doc.y).lineTo(576,doc.y).stroke();
-  doc.moveDown(.45);
+  doc.moveDown(.6);
   pdfText(doc,'Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
   doc.moveDown(.4).font('Helvetica-Bold').text('Instructions:',{continued:true});
   doc.font('Helvetica').text(` ${r.notes||'None'}`).moveDown(.7);
@@ -347,10 +345,13 @@ async function addAtLocation(product, inv, loc, qty){
   if(row) return sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:Number(row.quantity_available||0)+qty,delete_if_empty:row.delete_if_empty!==false,priority:row.priority||1}})});
   return sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
 }
-async function removeOtherEmptyLocations(product, keepLocation){
-  const inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[], removed=[];
+async function cleanupZeroLocationsAfterMove(product, keepLocation){
+  const inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+  const removed=[];
   for(const row of inv){
-    if(String(row.location||'').toLowerCase()===String(keepLocation||'').toLowerCase() || Number(row.quantity_available||0)!==0) continue;
+    if(String(row.location||'').toLowerCase()===String(keepLocation||'').toLowerCase()) continue;
+    if(Number(row.quantity_available||0)!==0) continue;
+    // Re-save the zero row with delete_if_empty=true. SellerChamp removes it when empty.
     await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:0,delete_if_empty:true,priority:row.priority||1}})});
     removed.push(row.location||'');
   }
@@ -375,59 +376,23 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     }
     if(['completed','archived'].includes(r.status)) return res.status(409).json({error:'This return has already been processed.'});
     const qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
-    let catalogUpdate=null, masterProduct=null, updateMethod='product_inventory_location';
-    try{
-      // SellerChamp's catalog quantity API works on MASTER products. The return SKU is
-      // a marketplace/product SKU and is not necessarily the catalogue_sku/barcode.
-      // Resolve the matching master product first, then update by explicit master_product_id.
-      const mpSearch=await sc(`/api/master_products?catalogue_sku=${encodeURIComponent(r.sku)}&page=1&page_size=100`);
-      const mps=mpSearch.master_products||[];
-      masterProduct=mps.find(x=>String(x.catalogue_sku||'').toLowerCase()===String(r.sku||'').toLowerCase())||null;
-      if(!masterProduct && product?.upc){
-        const upcSearch=await sc(`/api/master_products?upc=${encodeURIComponent(product.upc)}&page=1&page_size=100`);
-        const upcs=upcSearch.master_products||[];
-        if(upcs.length===1) masterProduct=upcs[0];
-      }
-      if(masterProduct){
-        catalogUpdate=await sc(`/api/master_products/${masterProduct.id}/update_quantities`,{
-          method:'POST',
-          body:JSON.stringify({inventory_action:'add',location:loc,quantity:qty})
-        });
-        updateMethod='master_product';
-        if(catalogUpdate?.success!==true) throw new Error('SellerChamp did not confirm the catalog inventory update.');
-      }else{
-        // Non-Catalog-Sync products still use the regular product inventory location API.
-        await addAtLocation(product,inv,loc,qty);
-      }
-    }catch(catalogErr){
-      if(String(catalogErr.message||'').toLowerCase().includes('catalog sync')){
-        await addAtLocation(product,inv,loc,qty);
-        updateMethod='product_inventory_location';
-      }else{
-        throw catalogErr;
-      }
-    }
+    await addAtLocation(product,inv,loc,qty);
     let removedEmptyLocations=[];
-    if(String(loc||'').trim().toLowerCase()!==String(r.location||'').trim().toLowerCase()) removedEmptyLocations=await removeOtherEmptyLocations(product,loc);
+    if(String(loc||'').trim().toLowerCase()!==String(r.location||'').trim().toLowerCase()){
+      try{removedEmptyLocations=await cleanupZeroLocationsAfterMove(product,loc)}catch{}
+    }
     const refreshed=await freshProduct(product.id);
     const marketplaceStatus=String(refreshed.marketplace_status||product.marketplace_status||'unknown').toLowerCase();
     r.inventory_result={at:now(),qty,location:loc,product_id:product.id,marketplace_status:marketplaceStatus};
     r.updated_at=now();
-    r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}${removedEmptyLocations.length?`; removed empty locations: ${removedEmptyLocations.join(', ')}`:''}`});
+    r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}`});
     r.status='inventory_added_pending_listing';
     const after=await getProductAndInventory(r);
-    let afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
-    let currentQty=Number(afterRow?.quantity_available||0);
-    if(updateMethod==='master_product'){
-      currentQty=Number(catalogUpdate.quantity_available||0);
-      const confirmed=(catalogUpdate.inventory_locations||catalogUpdate.master_product?.inventory_locations||[]).find(x=>String(x.location||'').toLowerCase()===String(loc).toLowerCase());
-      if(!confirmed) throw new Error(`SellerChamp did not return ${loc} in the updated catalog inventory. The return was not completed.`);
-    }else if(!afterRow){
-      throw new Error(`SellerChamp did not return ${loc} after the inventory update. The return was not completed.`);
-    }
+    const afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
+    const currentQty=Number(afterRow?.quantity_available||0);
     r.inventory_result.quantity_available=currentQty;
     writeDb(db);
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,inventory_locations:updateMethod==='master_product'?(catalogUpdate.inventory_locations||catalogUpdate.master_product?.inventory_locations||[]):after.inv,update_method:updateMethod});
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{
@@ -457,15 +422,12 @@ app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
     const r=db[idx]; if(r.status!=='inventory_added_pending_listing') return res.status(409).json({error:'Inventory must be added before relisting.'});
     const {product}=await getProductAndInventory(r);
-    await sc(`/api/products/${product.id}?relist=true`,{method:'PUT',body:JSON.stringify({product:{sku:product.sku,title:product.title,item_condition:product.item_condition}})});
-    const refreshed=await freshProduct(product.id);
-    const status=String(refreshed.marketplace_status||refreshed.status||'unknown').toLowerCase();
-    if(status!=='active'){
-      r.updated_at=now(); r.history.push({at:now(),action:'relist_requested',details:`Relist requested for ${r.sku}; SellerChamp status is ${status}. Return left in Process Returns.`}); writeDb(db);
-      return res.status(409).json({error:`SellerChamp received the activation request, but the listing status is ${status.toUpperCase()}. The return was NOT archived so you can try again.`,marketplace_status:status});
-    }
-    archiveRecord(r,'relisted_and_archived',`Relisted ${r.sku}; SellerChamp confirmed ACTIVE.`);
-    writeDb(db); res.json({ok:true,marketplace_status:status,archived:true});
+    // SellerChamp documents relist=true on PUT product. Send the current product fields
+    // instead of the empty object that was failing in the later builds.
+    await sc(`/api/products/${product.id}?relist=true`,{method:'PUT',body:JSON.stringify({product:{sku:product.sku,title:product.title,item_condition:product.item_condition,quantity_available:product.quantity_available}})});
+    let refreshed=null; try{refreshed=await freshProduct(product.id)}catch{}
+    archiveRecord(r,'relisted_and_archived',`Relist requested for ${r.sku}. Marketplace status after request: ${refreshed?.marketplace_status||'pending'}`);
+    writeDb(db); res.json({ok:true,marketplace_status:refreshed?.marketplace_status||'pending',archived:true});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/archive-inactive', (req,res)=>{

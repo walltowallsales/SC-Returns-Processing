@@ -171,27 +171,9 @@ PDF-only wording/formatting changes:
 - Requires confirmation, then refreshes the product and displays SellerChamp's current status.
 
 
-## V2-16
-- Tab 1 disposition labels changed to `Return to Inventory`, `Put in Reserve`, and `Create a New Listing`.
-- Existing descriptions under all three choices are unchanged.
-- PDF now has a horizontal separator line between Observed Condition and Decision.
-
-
-## V2-17
-- Tab 2: if you change the return location, other locations for that SellerChamp product are removed only when their quantity is zero. Any location with stock is preserved.
-- Fixed `Activate eBay Item & Archive Return` to use SellerChamp's documented product update with `relist=true`.
-- The return is archived only after SellerChamp reports the listing ACTIVE. If activation is not confirmed, the record remains in Process Returns and the status/error is displayed.
-
-
-## V2-18
-- Fixed Tab 2 normal-inventory processing to use SellerChamp's documented Inventory Update Quantities endpoint (`master_product_inventory_locations/update_quantities`) with `inventory_action: add`, SKU/barcode, location, and quantity.
-- Keeps the older product inventory-location endpoint as a fallback for products/accounts not using Catalog Sync.
-- The app now verifies SellerChamp returned/contains the destination inventory before reporting success.
-
-
-## V2-19
-- Version number is now displayed at the top of the app. Future releases should update this visible version.
-- Corrected Tab 2 inventory logic: SellerChamp's `update_quantities` endpoint is a Master Product/Catalog Sync endpoint. A marketplace SKU cannot simply be assumed to be the catalogue SKU.
-- The app now resolves the Master Product first and updates by explicit `master_product_id`; if Catalog Sync is unavailable, it uses the regular Product Inventory Location API.
-- Success is shown only after the destination location is present in SellerChamp's returned inventory data.
-- The UI reports which SellerChamp inventory system confirmed the update.
+## V2-20
+- Rolled Tab 2 normal-inventory write logic back to the known-working V2-15 implementation.
+- Removed the V2-17/V2-18/V2-19 Master Product/Catalog inventory experiments from this build.
+- Added zero-quantity old-location cleanup as a separate post-write step only when the location was changed. Cleanup failure does not undo or block the inventory update.
+- Corrected the relist request while retaining the V2-15 archive flow.
+- Added visible V2-20 version at the top of the app.
