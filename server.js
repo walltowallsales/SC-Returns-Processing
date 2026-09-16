@@ -439,49 +439,31 @@ app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
     const r=db[idx]; if(r.status!=='inventory_added_pending_listing') return res.status(409).json({error:'Inventory must be added before relisting.'});
     const {product}=await getProductAndInventory(r);
 
-    // SellerChamp documents relist directly on the bulk product update request.
-    // Use the exact SellerChamp product ID so there is no SKU/account ambiguity.
+    // SellerChamp's own UI queues a relist and explicitly says it may take a few minutes.
+    // Submit the same documented bulk relist request. A successful API response means the
+    // relist was accepted/queued; it does NOT mean marketplace_status changes immediately.
     let relistResponse;
     try{
       relistResponse=await sc('/api/products/bulk_update',{
         method:'PUT',
-        body:JSON.stringify({
-          products:[{id:product.id}],
-          relist:true
-        })
+        body:JSON.stringify({products:[{id:product.id}],relist:true})
       });
     }catch(e){
       r.updated_at=now(); r.history=r.history||[];
-      r.history.push({at:now(),action:'bulk_relist_api_error',details:String(e.message||e)});
+      r.history.push({at:now(),action:'relist_api_error',details:String(e.message||e)});
       writeDb(db);
-      return res.status(502).json({error:`SellerChamp rejected the activation request: ${e.message||e}. The return was NOT archived.`});
+      return res.status(502).json({error:`SellerChamp rejected the relist request: ${e.message||e}. The return was NOT archived.`});
     }
 
-    let refreshed=null, status='unknown';
-    for(let attempt=0;attempt<8;attempt++){
-      if(attempt) await new Promise(resolve=>setTimeout(resolve,1500));
-      try{
-        refreshed=await freshProduct(product.id);
-        status=String(refreshed?.marketplace_status||refreshed?.status||'unknown').toLowerCase();
-        if(status==='active') break;
-      }catch{}
-    }
+    let immediateStatus='unknown';
+    try{
+      const refreshed=await freshProduct(product.id);
+      immediateStatus=String(refreshed?.marketplace_status||refreshed?.status||'unknown').toLowerCase();
+    }catch{}
 
-    if(status!=='active'){
-      const responseSummary=JSON.stringify(relistResponse||{}).slice(0,2000);
-      r.updated_at=now(); r.history=r.history||[];
-      r.history.push({at:now(),action:'bulk_relist_not_active',details:`SellerChamp bulk relist response: ${responseSummary}; final status: ${status}`});
-      writeDb(db);
-      return res.status(409).json({
-        error:`SellerChamp bulk relist was submitted, but the item is still ${status.toUpperCase()}. The return was NOT archived.`,
-        marketplace_status:status,
-        sellerchamp_response:relistResponse
-      });
-    }
-
-    archiveRecord(r,'relisted_and_archived',`SellerChamp bulk relist confirmed ${r.sku} ACTIVE.`);
+    archiveRecord(r,'relist_queued_and_archived',`SellerChamp accepted the relist queue request for ${r.sku}. Immediate status: ${immediateStatus}. SellerChamp notes relisting may take a few minutes.`);
     writeDb(db);
-    res.json({ok:true,marketplace_status:status,archived:true,sellerchamp_response:relistResponse});
+    res.json({ok:true,relist_queued:true,marketplace_status:immediateStatus,archived:true,sellerchamp_response:relistResponse});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/archive-inactive', (req,res)=>{

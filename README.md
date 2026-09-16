@@ -242,3 +242,19 @@ PDF-only wording/formatting changes:
 - Sends no inventory or listing-field changes with the relist request.
 - Rechecks SellerChamp status up to eight times and archives only after ACTIVE is confirmed.
 - Working inventory and delete_if_empty behavior remain unchanged.
+
+
+## V2-29
+- Corrected activation completion logic based on SellerChamp's own UI behavior: relisting is queued and SellerChamp says it may take a few minutes.
+- Keeps the documented bulk relist request (`relist: true`) from V2-28.
+- A successful SellerChamp API response now means the relist request was accepted/queued; the return is archived immediately after that successful response instead of incorrectly requiring marketplace status to become ACTIVE within seconds.
+- If SellerChamp rejects the relist API request, the return remains in Process Returns.
+- The success message clearly says relisting may take a few minutes and shows the immediate status for reference.
+- Inventory and delete_if_empty behavior are unchanged.
+
+
+## V2-30
+- After `Activate eBay Item & Archive Return` succeeds and archives the return, the app opens Signal for the employee at +1 501-538-6504.
+- Prefills: `Check in 30 minutes to see if this (SKU-[SKU]) is active on eBay. If it is not, relist it.`
+- Signal is opened only after SellerChamp accepts the relist request and the return has been archived.
+- The user still taps Send in Signal.
