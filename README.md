@@ -224,3 +224,12 @@ PDF-only wording/formatting changes:
 - The return archives only after SellerChamp reports the item ACTIVE.
 - If SellerChamp still reports inactive/pending/unknown, the return remains in Process Returns and the exact status is shown.
 - V2-25 zero-location behavior remains unchanged.
+
+
+## V2-27
+- Activation-only change; working inventory and zero-location behavior are untouched.
+- Fetches the complete SellerChamp product immediately before activation and preserves its writable listing data in the relist update rather than sending a hand-built partial product.
+- Removes obvious read-only/inventory fields from the relist payload so activation cannot overwrite the inventory quantity.
+- Captures SellerChamp API rejection text and the relist response in the return history for diagnosis.
+- Rechecks status six times (about 7.5 seconds total) and archives only after SellerChamp reports ACTIVE.
+- Visible version updated to V2-27.

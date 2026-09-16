@@ -438,30 +438,55 @@ app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
     const r=db[idx]; if(r.status!=='inventory_added_pending_listing') return res.status(409).json({error:'Inventory must be added before relisting.'});
     const {product}=await getProductAndInventory(r);
-    // Relist the existing SellerChamp product. Do not send quantity_available here:
-    // inventory was already handled separately and we don't want activation to overwrite it.
-    const relistResponse=await sc(`/api/products/${product.id}?relist=true`,{
-      method:'PUT',
-      body:JSON.stringify({product:{sku:product.sku,title:product.title,item_condition:product.item_condition}})
-    });
+
+    // Fetch the complete SellerChamp product immediately before relisting. Preserve all
+    // SellerChamp-managed listing fields rather than constructing a small partial product.
+    const fullResponse=await sc(`/api/products/${product.id}`);
+    const full=fullResponse.product||fullResponse;
+    const payload={...full};
+    // Read-only/server-generated values should not be echoed in an update body.
+    for(const k of ['id','created_at','updated_at','marketplace_status','status','inventory_locations','quantity_available','available_quantity','reserved_quantity']){
+      delete payload[k];
+    }
+
+    let relistResponse;
+    try{
+      relistResponse=await sc(`/api/products/${product.id}?relist=true`,{
+        method:'PUT',
+        body:JSON.stringify({product:payload})
+      });
+    }catch(e){
+      r.updated_at=now(); r.history=r.history||[];
+      r.history.push({at:now(),action:'relist_api_error',details:String(e.message||e)});
+      writeDb(db);
+      return res.status(502).json({error:`SellerChamp rejected the activation request: ${e.message||e}. The return was NOT archived.`});
+    }
+
     let refreshed=null, status='unknown';
-    // SellerChamp can take a moment to reflect marketplace status, so verify a few times.
-    for(let attempt=0;attempt<4;attempt++){
-      if(attempt) await new Promise(resolve=>setTimeout(resolve,1200));
+    for(let attempt=0;attempt<6;attempt++){
+      if(attempt) await new Promise(resolve=>setTimeout(resolve,1500));
       try{
         refreshed=await freshProduct(product.id);
         status=String(refreshed?.marketplace_status||refreshed?.status||'unknown').toLowerCase();
         if(status==='active') break;
       }catch{}
     }
+
     if(status!=='active'){
+      const responseSummary=JSON.stringify(relistResponse||{}).slice(0,1500);
       r.updated_at=now(); r.history=r.history||[];
-      r.history.push({at:now(),action:'relist_requested_not_confirmed',details:`Relist requested for ${r.sku}; SellerChamp status after verification: ${status}. Return kept in Process Returns.`});
+      r.history.push({at:now(),action:'relist_not_active',details:`SellerChamp relist response: ${responseSummary}; final status: ${status}`});
       writeDb(db);
-      return res.status(409).json({error:`SellerChamp accepted the relist request, but the item is still ${status.toUpperCase()}. The return was NOT archived.`,marketplace_status:status,relist_response:relistResponse});
+      return res.status(409).json({
+        error:`SellerChamp processed the relist request, but the item is still ${status.toUpperCase()}. The return was NOT archived.`,
+        marketplace_status:status,
+        sellerchamp_response:relistResponse
+      });
     }
+
     archiveRecord(r,'relisted_and_archived',`SellerChamp confirmed ${r.sku} ACTIVE after relist.`);
-    writeDb(db); res.json({ok:true,marketplace_status:status,archived:true});
+    writeDb(db);
+    res.json({ok:true,marketplace_status:status,archived:true,sellerchamp_response:relistResponse});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/archive-inactive', (req,res)=>{
