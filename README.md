@@ -177,3 +177,11 @@ PDF-only wording/formatting changes:
 - Added zero-quantity old-location cleanup as a separate post-write step only when the location was changed. Cleanup failure does not undo or block the inventory update.
 - Corrected the relist request while retaining the V2-15 archive flow.
 - Added visible V2-20 version at the top of the app.
+
+
+## V2-21
+- Found a concrete regression introduced after V2-15: once a return was marked `inventory_added_pending_listing`, pressing Add to Inventory again returned early and never sent another SellerChamp inventory update.
+- Removed that silent skip so the existing stuck return can actually be retried.
+- Added before/after verification: the app records SellerChamp's quantity before the write, adds the return quantity, reads SellerChamp again, and requires the new quantity to equal `before + added`.
+- If SellerChamp does not reflect the expected change, the app shows the exact before/added/expected/actual quantities and leaves the return in Process Returns.
+- Visible version updated to V2-21.

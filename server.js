@@ -370,12 +370,10 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
   try{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
     const r=db[idx];
-    if(r.status==='inventory_added_pending_listing'){
-      const {product}=await getProductAndInventory(r);
-      return res.json({ok:true,already_added:true,marketplace_status:String(product.marketplace_status||'unknown').toLowerCase(),product_id:product.id});
-    }
     if(['completed','archived'].includes(r.status)) return res.status(409).json({error:'This return has already been processed.'});
     const qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
+    const beforeRow=inv.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
+    const beforeQty=Number(beforeRow?.quantity_available||0);
     await addAtLocation(product,inv,loc,qty);
     let removedEmptyLocations=[];
     if(String(loc||'').trim().toLowerCase()!==String(r.location||'').trim().toLowerCase()){
@@ -388,11 +386,17 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}`});
     r.status='inventory_added_pending_listing';
     const after=await getProductAndInventory(r);
-    const afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
+    const afterRow=after.inv.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
     const currentQty=Number(afterRow?.quantity_available||0);
+    const expectedQty=beforeQty+qty;
     r.inventory_result.quantity_available=currentQty;
+    r.inventory_result.before_quantity=beforeQty;
+    r.inventory_result.expected_quantity=expectedQty;
     writeDb(db);
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty});
+    if(!afterRow || currentQty!==expectedQty){
+      return res.status(502).json({error:`SellerChamp did not change ${loc} as expected. Before: ${beforeQty}. Added: ${qty}. Expected: ${expectedQty}. SellerChamp now reports: ${currentQty}. The return remains in Process Returns.`,before_quantity:beforeQty,expected_quantity:expectedQty,quantity_available:currentQty,location:loc});
+    }
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,before_quantity:beforeQty,expected_quantity:expectedQty});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{
