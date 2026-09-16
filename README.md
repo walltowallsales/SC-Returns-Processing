@@ -314,3 +314,11 @@ PDF-only wording/formatting changes:
 ## V2-38
 - After `Add + Reserve & Complete`, the app now re-fetches the SellerChamp product and verifies the actual reserve quantity in addition to re-reading the on-hand inventory location.
 - The Completed & Verified popup reports both current on-hand quantity and the verified current reserve quantity.
+
+
+## V2-39
+- Reworked `Add to inventory + reserve` to mirror the normal-inventory review workflow.
+- Adding inventory/reserve no longer archives immediately.
+- The report explicitly shows before → after values for both On Hand and Reserve and whether each matched the expected increase.
+- Both On Hand and Reserve remain editable after the report; `Update Quantities` writes both values to SellerChamp and reports the values SellerChamp returns.
+- A separate `Quantities Are Correct — Complete & Archive` button performs the archive only after review, then opens the editable Signal message.

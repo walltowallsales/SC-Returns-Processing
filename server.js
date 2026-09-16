@@ -477,19 +477,54 @@ app.post('/api/returns/:id/add-reserve', async(req,res)=>{
   try{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id);
     if(idx<0)return res.status(404).json({error:'Return not found'});
-    const r=db[idx], qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
+    const r=db[idx]; if(['completed','archived'].includes(r.status))return res.status(409).json({error:'This return has already been processed.'});
+    const qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
+    const beforeRow=inv.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
+    const beforeOnHand=Number(beforeRow?.quantity_available||0);
+    const beforeReserve=Number(product.reserve_quantity||0);
     await addAtLocation(product,inv,loc,qty);
-    const newReserve=Number(product.reserve_quantity||0)+qty;
-    await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:newReserve,reserve_quantity_location:req.body.reserve_location||loc}})});
-    // Verify inventory after both updates before archiving.
+    const requestedReserve=beforeReserve+qty;
+    await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:requestedReserve,reserve_quantity_location:req.body.reserve_location||loc}})});
     const verified=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
     const row=verified.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
     const onHand=Number(row?.quantity_available||0);
     const verifiedProduct=await freshProduct(product.id);
     const verifiedReserve=Number(verifiedProduct?.reserve_quantity||0);
-    archiveRecord(r,'inventory_reserved',`Added ${qty} at ${loc}; SellerChamp on hand verified at ${onHand}; reserve verified at ${verifiedReserve}`);
+    const expectedOnHand=beforeOnHand+qty, expectedReserve=beforeReserve+qty;
+    r.status='reserve_added_pending_review'; r.updated_at=now(); r.reserve_result={location:loc,quantity_added:qty,before_on_hand:beforeOnHand,quantity_available:onHand,before_reserve:beforeReserve,reserve_quantity:verifiedReserve,expected_on_hand:expectedOnHand,expected_reserve:expectedReserve};
+    r.history=r.history||[]; r.history.push({at:now(),action:'reserve_added_pending_review',details:`Added ${qty} at ${loc}. On hand ${beforeOnHand} → ${onHand}; reserve ${beforeReserve} → ${verifiedReserve}. Awaiting quantity review.`});
     writeDb(db);
-    res.json({ok:true,archived:true,sku:r.sku||'',title:r.title||'',location:loc,quantity_added:qty,quantity_available:onHand,reserve_quantity:verifiedReserve});
+    res.json({ok:true,archived:false,sku:r.sku||'',title:r.title||'',location:loc,quantity_added:qty,before_on_hand:beforeOnHand,quantity_available:onHand,before_reserve:beforeReserve,reserve_quantity:verifiedReserve,expected_on_hand:expectedOnHand,expected_reserve:expectedReserve,on_hand_verified:onHand===expectedOnHand,reserve_verified:verifiedReserve===expectedReserve});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+app.post('/api/returns/:id/set-reserve-quantities', async(req,res)=>{
+  try{
+    const db=readDb(), r=db.find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
+    if(r.status!=='reserve_added_pending_review')return res.status(409).json({error:'Reserve inventory must be added first.'});
+    const {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.reserve_result?.location||r.location;
+    const onHand=Math.max(0,Number(req.body.quantity_available||0)), reserve=Math.max(0,Number(req.body.reserve_quantity||0));
+    const row=inv.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
+    if(row) await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:loc,quantity_available:onHand,delete_if_empty:true,priority:row.priority||1}})});
+    else await sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:onHand,delete_if_empty:true,priority:1}})});
+    await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:reserve,reserve_quantity_location:loc}})});
+    const verifyInv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+    const verifyRow=verifyInv.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
+    const verifyProduct=await freshProduct(product.id);
+    const actualOnHand=Number(verifyRow?.quantity_available||0), actualReserve=Number(verifyProduct?.reserve_quantity||0);
+    r.reserve_result={...(r.reserve_result||{}),location:loc,quantity_available:actualOnHand,reserve_quantity:actualReserve};
+    r.updated_at=now(); r.history.push({at:now(),action:'reserve_quantities_corrected',details:`Set on hand to ${actualOnHand}; reserve to ${actualReserve}`}); writeDb(db);
+    res.json({ok:true,location:loc,quantity_available:actualOnHand,reserve_quantity:actualReserve});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+app.post('/api/returns/:id/archive-reserve', (req,res)=>{
+  try{
+    const db=readDb(), r=db.find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
+    if(r.status!=='reserve_added_pending_review')return res.status(409).json({error:'Reserve quantities must be reviewed first.'});
+    const loc=r.reserve_result?.location||r.location;
+    archiveRecord(r,'inventory_reserved','Inventory and reserve quantities reviewed and confirmed.'); writeDb(db);
+    res.json({ok:true,archived:true,sku:r.sku||'',title:r.title||'',location:loc});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/duplicate', async(req,res)=>{

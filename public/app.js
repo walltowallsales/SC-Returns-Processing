@@ -221,10 +221,19 @@ window.doReserve=id=>{
   showReserveConfirm(async()=>{
     try{
       const loc=$('#reserveLoc').value, qty=$('#reserveQty').value;
-      $('#processMsg').textContent='Adding inventory, updating reserve, and verifying SellerChamp…';
+      $('#processMsg').textContent='Adding inventory, updating reserve, and checking SellerChamp…';
       const j=await api(`/api/returns/${id}/add-reserve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:loc,reserve_location:$('#reserveNote').value,qty})});
-      $('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'});
-      showReserveComplete(j);
+      const onMsg=j.on_hand_verified?'CONFIRMED':'CHECK NEEDED';
+      const resMsg=j.reserve_verified?'CONFIRMED':'CHECK NEEDED';
+      $('#processMsg').innerHTML=`<div class="listing-warning"><b>SellerChamp update completed. Review before archiving.</b><br><br>
+        <b>Quantity added:</b> ${esc(j.quantity_added)}<br>
+        <b>On hand:</b> ${esc(j.before_on_hand)} → <b>${esc(j.quantity_available)}</b> &nbsp; <b>${onMsg}</b><br>
+        <b>Reserve:</b> ${esc(j.before_reserve)} → <b>${esc(j.reserve_quantity)}</b> &nbsp; <b>${resMsg}</b><br><br>
+        <label>Current On Hand Quantity</label><input id="reviewOnHand" type="number" inputmode="numeric" min="0" value="${esc(j.quantity_available)}">
+        <label>Current Reserve Quantity</label><input id="reviewReserve" type="number" inputmode="numeric" min="0" value="${esc(j.reserve_quantity)}">
+        <div class="row"><button class="secondary" onclick="updateReserveReview('${id}','${esc(j.location)}')">Update Quantities</button></div>
+        <br><button onclick="completeReserveArchive('${id}','${esc(j.location)}')">Quantities Are Correct — Complete & Archive</button>
+      </div>`;
     }catch(e){$('#processMsg').textContent=e.message}
   });
 };
@@ -237,25 +246,22 @@ function showReserveConfirm(onConfirm){
     <div style="font-size:20px;line-height:1.4;margin-bottom:22px">Add this quantity to SellerChamp inventory and increase the reserve quantity?</div>
     <button id="reserveConfirmYes" class="primary" style="width:100%;min-height:70px;font-size:24px;font-weight:800;margin-bottom:14px">YES — ADD + RESERVE</button>
     <button id="reserveConfirmNo" class="secondary" style="width:100%;min-height:58px;font-size:20px">Cancel</button></div>`;
-  document.body.appendChild(overlay);
-  $('#reserveConfirmNo').onclick=()=>overlay.remove();
-  $('#reserveConfirmYes').onclick=async()=>{overlay.remove();await onConfirm();};
+  document.body.appendChild(overlay);$('#reserveConfirmNo').onclick=()=>overlay.remove();$('#reserveConfirmYes').onclick=async()=>{overlay.remove();await onConfirm();};
 }
-function showReserveComplete(j){
-  const overlay=document.createElement('div');overlay.id='reserveCompleteOverlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:18px';
-  overlay.innerHTML=`<div style="background:#fff;width:min(620px,100%);border-radius:22px;padding:24px;box-shadow:0 15px 50px rgba(0,0,0,.3)">
-    <div style="font-size:28px;font-weight:800;margin-bottom:14px">Completed & Verified</div>
-    <div style="font-size:20px;line-height:1.5">
-      <b>SKU:</b> ${esc(j.sku||'')}<br><b>Location:</b> ${esc(j.location||'')}<br>
-      <b>Quantity added:</b> ${esc(j.quantity_added)}<br><b>Current on hand:</b> ${esc(j.quantity_available)}<br>
-      <b>Reserve quantity:</b> ${esc(j.reserve_quantity)}<br><br>
-      SellerChamp inventory and reserve were updated and the return was archived.
-    </div>
-    <button id="reserveSignalNext" class="primary" style="width:100%;min-height:68px;font-size:22px;font-weight:800;margin-top:22px">Continue to Signal Message</button></div>`;
-  document.body.appendChild(overlay);
-  $('#reserveSignalNext').onclick=()=>{overlay.remove();showSignalMessage(`SKU-${j.sku||''} -- Loc-${j.location||''} -- ${j.title||''} -- `);};
-}
+window.updateReserveReview=async (id,loc)=>{
+  try{
+    const j=await api(`/api/returns/${id}/set-reserve-quantities`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:loc,quantity_available:$('#reviewOnHand').value,reserve_quantity:$('#reviewReserve').value})});
+    $('#reviewOnHand').value=j.quantity_available; $('#reviewReserve').value=j.reserve_quantity;
+    alert(`SellerChamp now reports On Hand: ${j.quantity_available} and Reserve: ${j.reserve_quantity}.`);
+  }catch(e){alert(e.message)}
+};
+window.completeReserveArchive=async (id,loc)=>{
+  try{
+    const j=await api(`/api/returns/${id}/archive-reserve`,{method:'POST'});
+    $('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'});
+    showSignalMessage(`SKU-${j.sku||''} -- Loc-${j.location||loc||''} -- ${j.title||''} -- `);
+  }catch(e){$('#processMsg').textContent=e.message}
+};
 window.doDuplicate=async id=>{if(!confirm('This will create and auto-submit a new SellerChamp/eBay listing. Continue?'))return;try{await api(`/api/returns/${id}/duplicate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sku:$('#newSku').value,title:$('#newTitle').value,item_condition:$('#newCondition').value,item_remarks:$('#newRemarks').value,location:$('#newLoc').value,qty:$('#newQty').value,retail_price:$('#newPrice').value})});alert('New listing submitted. This return has been archived.');$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}};
 
 
