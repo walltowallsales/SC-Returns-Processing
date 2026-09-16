@@ -233,3 +233,12 @@ PDF-only wording/formatting changes:
 - Captures SellerChamp API rejection text and the relist response in the return history for diagnosis.
 - Rechecks status six times (about 7.5 seconds total) and archives only after SellerChamp reports ACTIVE.
 - Visible version updated to V2-27.
+
+
+## V2-28
+- Changed only the eBay activation/relist operation.
+- Uses SellerChamp's documented `PUT /api/products/bulk_update` request with `relist: true`.
+- Identifies the product by its exact SellerChamp product ID, avoiding SKU/account ambiguity.
+- Sends no inventory or listing-field changes with the relist request.
+- Rechecks SellerChamp status up to eight times and archives only after ACTIVE is confirmed.
+- Working inventory and delete_if_empty behavior remain unchanged.
