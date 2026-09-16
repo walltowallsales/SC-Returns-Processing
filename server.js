@@ -463,7 +463,7 @@ app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
 
     archiveRecord(r,'relist_queued_and_archived',`SellerChamp accepted the relist queue request for ${r.sku}. Immediate status: ${immediateStatus}. SellerChamp notes relisting may take a few minutes.`);
     writeDb(db);
-    res.json({ok:true,relist_queued:true,marketplace_status:immediateStatus,archived:true,sellerchamp_response:relistResponse});
+    res.json({ok:true,relist_queued:true,marketplace_status:immediateStatus,archived:true,sku:r.sku||'',sellerchamp_response:relistResponse});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/archive-inactive', (req,res)=>{

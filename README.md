@@ -258,3 +258,10 @@ PDF-only wording/formatting changes:
 - Prefills: `Check in 30 minutes to see if this (SKU-[SKU]) is active on eBay. If it is not, relist it.`
 - Signal is opened only after SellerChamp accepts the relist request and the return has been archived.
 - The user still taps Send in Signal.
+
+
+## V2-31
+- Fixed `Can't find variable: returnsCache` when activating and archiving.
+- The client no longer depends on a nonexistent `returnsCache` variable.
+- The server returns the archived return's SKU with the successful relist response, so the Signal message always has the SKU.
+- Relist, archive, inventory, and delete_if_empty behavior otherwise remain unchanged.

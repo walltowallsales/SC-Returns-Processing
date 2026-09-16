@@ -147,13 +147,12 @@ window.changeStockQty=async id=>{
 window.archiveActive=async id=>{
   try{await api(`/api/returns/${id}/archive-active`,{method:'POST'});$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}
 };
-window.activateAndArchive=async id=>{
+window.activateAndArchive=async (id,sku='')=>{
   try{
-    const rec=returnsCache.find(x=>x.id===id);
-    const sku=rec?.sku||'';
     $('#processMsg').textContent='Submitting eBay relist to SellerChamp…';
     const j=await api(`/api/returns/${id}/relist-and-archive`,{method:'POST'});
     $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'});
+    sku=sku||j.sku||'';
     const msg=`Check in 30 minutes to see if this (SKU-${sku}) is active on eBay. If it is not, relist it.`;
     const signalUrl=`https://signal.me/#p/+15015386504&text=${encodeURIComponent(msg)}`;
     // Open Signal only after SellerChamp accepted the relist and the return archived.
