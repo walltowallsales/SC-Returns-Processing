@@ -175,3 +175,9 @@ PDF-only wording/formatting changes:
 - Tab 1 disposition labels changed to `Return to Inventory`, `Put in Reserve`, and `Create a New Listing`.
 - Existing descriptions under all three choices are unchanged.
 - PDF now has a horizontal separator line between Observed Condition and Decision.
+
+
+## V2-17
+- Tab 2: if you change the return location, other locations for that SellerChamp product are removed only when their quantity is zero. Any location with stock is preserved.
+- Fixed `Activate eBay Item & Archive Return` to use SellerChamp's documented product update with `relist=true`.
+- The return is archived only after SellerChamp reports the listing ACTIVE. If activation is not confirmed, the record remains in Process Returns and the status/error is displayed.

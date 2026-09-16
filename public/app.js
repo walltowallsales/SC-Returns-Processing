@@ -146,8 +146,12 @@ window.archiveActive=async id=>{
   try{await api(`/api/returns/${id}/archive-active`,{method:'POST'});$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}
 };
 window.activateAndArchive=async id=>{
-  if(!confirm('Relist/activate this item on eBay through SellerChamp and archive the return?'))return;
-  try{ $('#processMsg').textContent='Sending relist request to SellerChamp…'; const j=await api(`/api/returns/${id}/relist-and-archive`,{method:'POST'}); alert(`Relist request sent. SellerChamp status: ${String(j.marketplace_status||'pending').toUpperCase()}. The return has been archived.`); $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'}); }catch(e){$('#processMsg').textContent=e.message}
+  try{
+    $('#processMsg').textContent='Activating eBay item through SellerChamp…';
+    await api(`/api/returns/${id}/relist-and-archive`,{method:'POST'});
+    alert('eBay item is ACTIVE and the return has been archived.');
+    $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){$('#processMsg').textContent=e.message}
 };
 window.leaveInactiveAndArchive=async id=>{
   if(!confirm('Leave the eBay item inactive and archive this return?'))return;

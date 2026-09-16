@@ -347,6 +347,15 @@ async function addAtLocation(product, inv, loc, qty){
   if(row) return sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:Number(row.quantity_available||0)+qty,delete_if_empty:row.delete_if_empty!==false,priority:row.priority||1}})});
   return sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
 }
+async function removeOtherEmptyLocations(product, keepLocation){
+  const inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[], removed=[];
+  for(const row of inv){
+    if(String(row.location||'').toLowerCase()===String(keepLocation||'').toLowerCase() || Number(row.quantity_available||0)!==0) continue;
+    await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:0,delete_if_empty:true,priority:row.priority||1}})});
+    removed.push(row.location||'');
+  }
+  return removed;
+}
 app.get('/api/returns/:id/listing-status', async(req,res)=>{
   try{
     const r=readDb().find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'});
@@ -367,11 +376,13 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     if(['completed','archived'].includes(r.status)) return res.status(409).json({error:'This return has already been processed.'});
     const qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
     await addAtLocation(product,inv,loc,qty);
+    let removedEmptyLocations=[];
+    if(String(loc||'').trim().toLowerCase()!==String(r.location||'').trim().toLowerCase()) removedEmptyLocations=await removeOtherEmptyLocations(product,loc);
     const refreshed=await freshProduct(product.id);
     const marketplaceStatus=String(refreshed.marketplace_status||product.marketplace_status||'unknown').toLowerCase();
     r.inventory_result={at:now(),qty,location:loc,product_id:product.id,marketplace_status:marketplaceStatus};
     r.updated_at=now();
-    r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}`});
+    r.history.push({at:now(),action:'inventory_added',details:`Added ${qty} at ${loc}; marketplace status ${marketplaceStatus}${removedEmptyLocations.length?`; removed empty locations: ${removedEmptyLocations.join(', ')}`:''}`});
     r.status='inventory_added_pending_listing';
     const after=await getProductAndInventory(r);
     const afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
@@ -408,10 +419,15 @@ app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
     const r=db[idx]; if(r.status!=='inventory_added_pending_listing') return res.status(409).json({error:'Inventory must be added before relisting.'});
     const {product}=await getProductAndInventory(r);
-    await sc(`/api/products/${product.id}?relist=true`,{method:'PUT',body:JSON.stringify({product:{}})});
-    let refreshed=null; try{refreshed=await freshProduct(product.id)}catch{}
-    archiveRecord(r,'relisted_and_archived',`Relist requested for ${r.sku}. Marketplace status after request: ${refreshed?.marketplace_status||'pending'}`);
-    writeDb(db); res.json({ok:true,marketplace_status:refreshed?.marketplace_status||'pending'});
+    await sc(`/api/products/${product.id}?relist=true`,{method:'PUT',body:JSON.stringify({product:{sku:product.sku,title:product.title,item_condition:product.item_condition}})});
+    const refreshed=await freshProduct(product.id);
+    const status=String(refreshed.marketplace_status||refreshed.status||'unknown').toLowerCase();
+    if(status!=='active'){
+      r.updated_at=now(); r.history.push({at:now(),action:'relist_requested',details:`Relist requested for ${r.sku}; SellerChamp status is ${status}. Return left in Process Returns.`}); writeDb(db);
+      return res.status(409).json({error:`SellerChamp received the activation request, but the listing status is ${status.toUpperCase()}. The return was NOT archived so you can try again.`,marketplace_status:status});
+    }
+    archiveRecord(r,'relisted_and_archived',`Relisted ${r.sku}; SellerChamp confirmed ACTIVE.`);
+    writeDb(db); res.json({ok:true,marketplace_status:status,archived:true});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/archive-inactive', (req,res)=>{
