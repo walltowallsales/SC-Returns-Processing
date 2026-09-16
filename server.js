@@ -309,7 +309,9 @@ app.get('/api/returns/:id/pdf', (req,res)=>{
   doc.font('Helvetica').text(obsText);
   const obsW=Math.min(doc.widthOfString(obsText),Math.max(0,576-obsX));
   doc.moveTo(obsX,obsY+doc.currentLineHeight()).lineTo(obsX+obsW,obsY+doc.currentLineHeight()).stroke();
-  doc.moveDown(.6);
+  doc.moveDown(.35);
+  doc.moveTo(36,doc.y).lineTo(576,doc.y).stroke();
+  doc.moveDown(.45);
   pdfText(doc,'Decision:', ({return_inventory:'RETURN TO NORMAL INVENTORY',reserve_inventory:'RETURN TO INVENTORY + RESERVE',duplicate_product:'CREATE SEPARATE PRODUCT'})[r.disposition] || r.disposition);
   doc.moveDown(.4).font('Helvetica-Bold').text('Instructions:',{continued:true});
   doc.font('Helvetica').text(` ${r.notes||'None'}`).moveDown(.7);

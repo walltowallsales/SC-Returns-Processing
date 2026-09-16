@@ -169,3 +169,9 @@ PDF-only wording/formatting changes:
 - Tab 4 now shows an **Activate Item** button whenever the selected product's SellerChamp marketplace status is not active.
 - Activation uses the same SellerChamp product relist endpoint already used by the Returns processing workflow.
 - Requires confirmation, then refreshes the product and displays SellerChamp's current status.
+
+
+## V2-16
+- Tab 1 disposition labels changed to `Return to Inventory`, `Put in Reserve`, and `Create a New Listing`.
+- Existing descriptions under all three choices are unchanged.
+- PDF now has a horizontal separator line between Observed Condition and Decision.
