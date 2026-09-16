@@ -347,15 +347,23 @@ async function addAtLocation(product, inv, loc, qty){
 }
 async function cleanupZeroLocationsAfterMove(product, keepLocation){
   const inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
-  const removed=[];
+  const removed=[], failed=[];
   for(const row of inv){
     if(String(row.location||'').toLowerCase()===String(keepLocation||'').toLowerCase()) continue;
     if(Number(row.quantity_available||0)!==0) continue;
-    // Re-save the zero row with delete_if_empty=true. SellerChamp removes it when empty.
-    await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:0,delete_if_empty:true,priority:row.priority||1}})});
-    removed.push(row.location||'');
+    try{
+      await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'DELETE'});
+      removed.push(row.location||'');
+    }catch(deleteErr){
+      try{
+        await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:0,delete_if_empty:true,priority:row.priority||1}})});
+        const check=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+        if(!check.some(x=>String(x.id)===String(row.id))) removed.push(row.location||'');
+        else failed.push(row.location||'');
+      }catch{ failed.push(row.location||''); }
+    }
   }
-  return removed;
+  return {removed,failed};
 }
 app.get('/api/returns/:id/listing-status', async(req,res)=>{
   try{
@@ -375,10 +383,6 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     const beforeRow=inv.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
     const beforeQty=Number(beforeRow?.quantity_available||0);
     await addAtLocation(product,inv,loc,qty);
-    let removedEmptyLocations=[];
-    if(String(loc||'').trim().toLowerCase()!==String(r.location||'').trim().toLowerCase()){
-      try{removedEmptyLocations=await cleanupZeroLocationsAfterMove(product,loc)}catch{}
-    }
     const refreshed=await freshProduct(product.id);
     const marketplaceStatus=String(refreshed.marketplace_status||product.marketplace_status||'unknown').toLowerCase();
     r.inventory_result={at:now(),qty,location:loc,product_id:product.id,marketplace_status:marketplaceStatus};
@@ -396,7 +400,11 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     if(!afterRow || currentQty!==expectedQty){
       return res.status(502).json({error:`SellerChamp did not change ${loc} as expected. Before: ${beforeQty}. Added: ${qty}. Expected: ${expectedQty}. SellerChamp now reports: ${currentQty}. The return remains in Process Returns.`,before_quantity:beforeQty,expected_quantity:expectedQty,quantity_available:currentQty,location:loc});
     }
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,before_quantity:beforeQty,expected_quantity:expectedQty});
+    let cleanup={removed:[],failed:[]};
+    try{cleanup=await cleanupZeroLocationsAfterMove(product,loc)}catch{}
+    if(cleanup.removed.length) r.history.push({at:now(),action:'zero_locations_removed',details:`Removed zero-quantity locations: ${cleanup.removed.join(', ')}`});
+    writeDb(db);
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,before_quantity:beforeQty,expected_quantity:expectedQty,removed_zero_locations:cleanup.removed,failed_zero_locations:cleanup.failed});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{

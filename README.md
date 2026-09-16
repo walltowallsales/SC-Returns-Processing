@@ -185,3 +185,11 @@ PDF-only wording/formatting changes:
 - Added before/after verification: the app records SellerChamp's quantity before the write, adds the return quantity, reads SellerChamp again, and requires the new quantity to equal `before + added`.
 - If SellerChamp does not reflect the expected change, the app shows the exact before/added/expected/actual quantities and leaves the return in Process Returns.
 - Visible version updated to V2-21.
+
+
+## V2-22
+- Preserves V2-21's confirmed-working Add to Inventory code unchanged.
+- Zero-quantity location cleanup now happens only AFTER SellerChamp has confirmed the inventory quantity changed correctly.
+- All other locations with quantity exactly 0 are removed; the destination location is always preserved and any location with quantity above 0 is never touched.
+- Cleanup first attempts an explicit inventory-location DELETE, with `delete_if_empty=true` as a fallback.
+- The Process Returns result reports which zero-quantity locations were removed and any that SellerChamp would not remove.
