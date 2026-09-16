@@ -151,14 +151,43 @@ window.activateAndArchive=async (id,sku='')=>{
   try{
     $('#processMsg').textContent='Submitting eBay relist to SellerChamp…';
     const j=await api(`/api/returns/${id}/relist-and-archive`,{method:'POST'});
-    $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'});
     sku=sku||j.sku||'';
-    const msg=`Check in 30 minutes to see if this (SKU-${sku}) is active on eBay. If it is not, relist it.`;
-    const signalUrl=`https://signal.me/#p/+15015386504&text=${encodeURIComponent(msg)}`;
-    // Open Signal only after SellerChamp accepted the relist and the return archived.
-    window.location.href=signalUrl;
+    $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'});
+    const defaultMsg=`Check in 30 minutes to see if this (SKU-${sku}) is active on eBay. If it is not, relist it.`;
+    showSignalMessage(defaultMsg);
   }catch(e){$('#processMsg').textContent=e.message}
 };
+
+function showSignalMessage(message){
+  const existing=document.getElementById('signalComposeOverlay');
+  if(existing) existing.remove();
+  const overlay=document.createElement('div');
+  overlay.id='signalComposeOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px';
+  overlay.innerHTML=`
+    <div style="background:#fff;width:min(680px,100%);border-radius:20px;padding:22px;box-shadow:0 15px 50px rgba(0,0,0,.3)">
+      <div style="font-size:28px;font-weight:800;margin-bottom:12px">Signal to Send</div>
+      <textarea id="signalComposeText" style="box-sizing:border-box;width:100%;min-height:180px;font:inherit;font-size:20px;line-height:1.4;padding:14px;border:2px solid #cbd3df;border-radius:12px;resize:vertical"></textarea>
+      <div id="signalCopyStatus" style="min-height:28px;margin-top:8px;font-weight:700"></div>
+      <button id="signalCopyBtn" class="primary" style="width:100%;font-size:22px;padding:16px;margin-top:4px">Copy Message & Open Signal</button>
+      <button id="signalCloseBtn" style="width:100%;font-size:18px;padding:12px;margin-top:10px">Close</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const ta=document.getElementById('signalComposeText');
+  ta.value=message;
+  document.getElementById('signalCloseBtn').onclick=()=>overlay.remove();
+  document.getElementById('signalCopyBtn').onclick=async()=>{
+    const text=ta.value;
+    try{
+      await navigator.clipboard.writeText(text);
+    }catch{
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+    }
+    document.getElementById('signalCopyStatus').textContent='Copied. Opening Signal…';
+    setTimeout(()=>{ window.location.href='https://signal.me/#p/+15015386504'; },250);
+  };
+}
 window.leaveInactiveAndArchive=async id=>{
   if(!confirm('Leave the eBay item inactive and archive this return?'))return;
   try{ await api(`/api/returns/${id}/archive-inactive`,{method:'POST'}); $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'}); }catch(e){$('#processMsg').textContent=e.message}

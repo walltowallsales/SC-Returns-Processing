@@ -265,3 +265,11 @@ PDF-only wording/formatting changes:
 - The client no longer depends on a nonexistent `returnsCache` variable.
 - The server returns the archived return's SKU with the successful relist response, so the Signal message always has the SKU.
 - Relist, archive, inventory, and delete_if_empty behavior otherwise remain unchanged.
+
+
+## V2-32
+- After a successful relist/archive, the app now shows a `Signal to Send` dialog instead of immediately opening Signal.
+- The reminder message is displayed in a large editable text box so it can be changed before sending.
+- `Copy Message & Open Signal` copies the edited text to the clipboard, then opens the employee's Signal contact.
+- The user can paste and send the message in Signal.
+- A Close button dismisses the dialog without opening Signal.
