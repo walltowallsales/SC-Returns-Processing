@@ -346,30 +346,27 @@ async function addAtLocation(product, inv, loc, qty){
   return sc(`/api/products/${product.id}/inventory_locations`,{method:'POST',body:JSON.stringify({inventory_location:{location:loc,quantity_available:qty,delete_if_empty:true,priority:1}})});
 }
 async function cleanupZeroLocationsAfterMove(product, keepLocation){
-  const initial=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
-  const targets=initial.filter(row=>String(row.location||'').toLowerCase()!==String(keepLocation||'').toLowerCase() && Number(row.quantity_available||0)===0);
-  if(!targets.length) return {removed:[],failed:[],results:[]};
-  const results=[];
-  // Try bulk first for all zero rows.
-  try{
-    await sc('/api/inventory_locations/bulk_update',{method:'PUT',body:JSON.stringify({inventory_locations:targets.map(row=>({id:row.id,product_id:product.id,location:row.location,quantity_available:0,priority:row.priority||1,delete_if_empty:true}))})});
-  }catch{}
-  let check=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
-  for(const row of targets){
-    if(!check.some(x=>String(x.id)===String(row.id))){
-      results.push({location:row.location||'',method:'Bulk Update',removed:true});
-      continue;
-    }
-    let removed=false;
+  const inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+  const updated=[], failed=[];
+  for(const row of inv){
+    if(String(row.location||'').toLowerCase()===String(keepLocation||'').toLowerCase()) continue;
+    if(Number(row.quantity_available||0)!==0) continue;
     try{
-      await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:1,delete_if_empty:true,priority:row.priority||1}})});
-      await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{method:'PUT',body:JSON.stringify({inventory_location:{location:row.location,quantity_available:0,delete_if_empty:true,priority:row.priority||1}})});
-      const verify=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
-      removed=!verify.some(x=>String(x.id)===String(row.id));
-    }catch{}
-    results.push({location:row.location||'',method:removed?'1 → 0 Delete-if-Empty':'Neither method',removed});
+      // Do not attempt to remove the location. Only mark an empty location so SellerChamp
+      // may remove it later if/when its own delete-if-empty behavior is triggered.
+      await sc(`/api/products/${product.id}/inventory_locations/${row.id}`,{
+        method:'PUT',
+        body:JSON.stringify({inventory_location:{
+          location:row.location,
+          quantity_available:0,
+          delete_if_empty:true,
+          priority:row.priority||1
+        }})
+      });
+      updated.push(row.location||'');
+    }catch{failed.push(row.location||'')}
   }
-  return {removed:results.filter(x=>x.removed).map(x=>x.location),failed:results.filter(x=>!x.removed).map(x=>x.location),results};
+  return {removed:[],failed,results:updated.map(location=>({location,method:'delete_if_empty set to true',removed:false})),delete_if_empty_updated:updated};
 }
 
 app.get('/api/returns/:id/listing-status', async(req,res)=>{
@@ -411,7 +408,7 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     try{cleanup=await cleanupZeroLocationsAfterMove(product,loc)}catch{}
     if(cleanup.removed.length) r.history.push({at:now(),action:'zero_locations_removed',details:`Removed zero-quantity locations: ${cleanup.removed.join(', ')}`});
     writeDb(db);
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,before_quantity:beforeQty,expected_quantity:expectedQty,removed_zero_locations:cleanup.removed,failed_zero_locations:cleanup.failed,cleanup_results:cleanup.results});
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,before_quantity:beforeQty,expected_quantity:expectedQty,removed_zero_locations:cleanup.removed,failed_zero_locations:cleanup.failed,cleanup_results:cleanup.results,delete_if_empty_updated:cleanup.delete_if_empty_updated||[]});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{
@@ -441,12 +438,30 @@ app.post('/api/returns/:id/relist-and-archive', async(req,res)=>{
     const db=readDb(), idx=db.findIndex(x=>x.id===req.params.id); if(idx<0)return res.status(404).json({error:'Return not found'});
     const r=db[idx]; if(r.status!=='inventory_added_pending_listing') return res.status(409).json({error:'Inventory must be added before relisting.'});
     const {product}=await getProductAndInventory(r);
-    // SellerChamp documents relist=true on PUT product. Send the current product fields
-    // instead of the empty object that was failing in the later builds.
-    await sc(`/api/products/${product.id}?relist=true`,{method:'PUT',body:JSON.stringify({product:{sku:product.sku,title:product.title,item_condition:product.item_condition,quantity_available:product.quantity_available}})});
-    let refreshed=null; try{refreshed=await freshProduct(product.id)}catch{}
-    archiveRecord(r,'relisted_and_archived',`Relist requested for ${r.sku}. Marketplace status after request: ${refreshed?.marketplace_status||'pending'}`);
-    writeDb(db); res.json({ok:true,marketplace_status:refreshed?.marketplace_status||'pending',archived:true});
+    // Relist the existing SellerChamp product. Do not send quantity_available here:
+    // inventory was already handled separately and we don't want activation to overwrite it.
+    const relistResponse=await sc(`/api/products/${product.id}?relist=true`,{
+      method:'PUT',
+      body:JSON.stringify({product:{sku:product.sku,title:product.title,item_condition:product.item_condition}})
+    });
+    let refreshed=null, status='unknown';
+    // SellerChamp can take a moment to reflect marketplace status, so verify a few times.
+    for(let attempt=0;attempt<4;attempt++){
+      if(attempt) await new Promise(resolve=>setTimeout(resolve,1200));
+      try{
+        refreshed=await freshProduct(product.id);
+        status=String(refreshed?.marketplace_status||refreshed?.status||'unknown').toLowerCase();
+        if(status==='active') break;
+      }catch{}
+    }
+    if(status!=='active'){
+      r.updated_at=now(); r.history=r.history||[];
+      r.history.push({at:now(),action:'relist_requested_not_confirmed',details:`Relist requested for ${r.sku}; SellerChamp status after verification: ${status}. Return kept in Process Returns.`});
+      writeDb(db);
+      return res.status(409).json({error:`SellerChamp accepted the relist request, but the item is still ${status.toUpperCase()}. The return was NOT archived.`,marketplace_status:status,relist_response:relistResponse});
+    }
+    archiveRecord(r,'relisted_and_archived',`SellerChamp confirmed ${r.sku} ACTIVE after relist.`);
+    writeDb(db); res.json({ok:true,marketplace_status:status,archived:true});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/archive-inactive', (req,res)=>{

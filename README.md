@@ -207,3 +207,20 @@ PDF-only wording/formatting changes:
 - Reports the exact zero-location cleanup method that succeeded for each location.
 - Displays `Removed [location] using Bulk Update`, `Removed [location] using 1 → 0 Delete-if-Empty`, or `Could not remove [location] — neither method worked`.
 - Inventory-add behavior remains unchanged from the confirmed-working V2-21 path.
+
+
+## V2-25
+- Stopped attempting to remove old zero-quantity inventory locations.
+- After a successful return inventory update, each other location whose quantity is exactly 0 is simply updated with `delete_if_empty: true`.
+- No 1 → 0 quantity manipulation and no bulk/delete attempt.
+- The app reports each zero location whose delete-if-empty setting was updated.
+- Confirmed-working V2-21 inventory-add path remains unchanged.
+
+
+## V2-26
+- Focused fix for `Activate eBay Item & Archive Return`.
+- Activation no longer sends `quantity_available` in the product relist payload, avoiding an inventory overwrite/conflict.
+- After the relist request, the server rechecks SellerChamp status up to four times.
+- The return archives only after SellerChamp reports the item ACTIVE.
+- If SellerChamp still reports inactive/pending/unknown, the return remains in Process Returns and the exact status is shown.
+- V2-25 zero-location behavior remains unchanged.
