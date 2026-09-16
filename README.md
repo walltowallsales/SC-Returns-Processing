@@ -187,3 +187,11 @@ PDF-only wording/formatting changes:
 - Fixed Tab 2 normal-inventory processing to use SellerChamp's documented Inventory Update Quantities endpoint (`master_product_inventory_locations/update_quantities`) with `inventory_action: add`, SKU/barcode, location, and quantity.
 - Keeps the older product inventory-location endpoint as a fallback for products/accounts not using Catalog Sync.
 - The app now verifies SellerChamp returned/contains the destination inventory before reporting success.
+
+
+## V2-19
+- Version number is now displayed at the top of the app. Future releases should update this visible version.
+- Corrected Tab 2 inventory logic: SellerChamp's `update_quantities` endpoint is a Master Product/Catalog Sync endpoint. A marketplace SKU cannot simply be assumed to be the catalogue SKU.
+- The app now resolves the Master Product first and updates by explicit `master_product_id`; if Catalog Sync is unavailable, it uses the regular Product Inventory Location API.
+- Success is shown only after the destination location is present in SellerChamp's returned inventory data.
+- The UI reports which SellerChamp inventory system confirmed the update.

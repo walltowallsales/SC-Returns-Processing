@@ -375,15 +375,37 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     }
     if(['completed','archived'].includes(r.status)) return res.status(409).json({error:'This return has already been processed.'});
     const qty=Number(req.body.qty||r.returned_qty||1), {product,inv}=await getProductAndInventory(r), loc=req.body.location||r.location;
-    let catalogUpdate=null;
+    let catalogUpdate=null, masterProduct=null, updateMethod='product_inventory_location';
     try{
-      catalogUpdate=await sc('/api/master_product_inventory_locations/update_quantities',{
-        method:'POST',
-        body:JSON.stringify({barcode:r.sku,inventory_action:'add',location:loc,quantity:qty})
-      });
+      // SellerChamp's catalog quantity API works on MASTER products. The return SKU is
+      // a marketplace/product SKU and is not necessarily the catalogue_sku/barcode.
+      // Resolve the matching master product first, then update by explicit master_product_id.
+      const mpSearch=await sc(`/api/master_products?catalogue_sku=${encodeURIComponent(r.sku)}&page=1&page_size=100`);
+      const mps=mpSearch.master_products||[];
+      masterProduct=mps.find(x=>String(x.catalogue_sku||'').toLowerCase()===String(r.sku||'').toLowerCase())||null;
+      if(!masterProduct && product?.upc){
+        const upcSearch=await sc(`/api/master_products?upc=${encodeURIComponent(product.upc)}&page=1&page_size=100`);
+        const upcs=upcSearch.master_products||[];
+        if(upcs.length===1) masterProduct=upcs[0];
+      }
+      if(masterProduct){
+        catalogUpdate=await sc(`/api/master_products/${masterProduct.id}/update_quantities`,{
+          method:'POST',
+          body:JSON.stringify({inventory_action:'add',location:loc,quantity:qty})
+        });
+        updateMethod='master_product';
+        if(catalogUpdate?.success!==true) throw new Error('SellerChamp did not confirm the catalog inventory update.');
+      }else{
+        // Non-Catalog-Sync products still use the regular product inventory location API.
+        await addAtLocation(product,inv,loc,qty);
+      }
     }catch(catalogErr){
-      // Fallback for accounts/items not using Catalog Sync.
-      await addAtLocation(product,inv,loc,qty);
+      if(String(catalogErr.message||'').toLowerCase().includes('catalog sync')){
+        await addAtLocation(product,inv,loc,qty);
+        updateMethod='product_inventory_location';
+      }else{
+        throw catalogErr;
+      }
     }
     let removedEmptyLocations=[];
     if(String(loc||'').trim().toLowerCase()!==String(r.location||'').trim().toLowerCase()) removedEmptyLocations=await removeOtherEmptyLocations(product,loc);
@@ -396,13 +418,16 @@ app.post('/api/returns/:id/add-inventory', async(req,res)=>{
     const after=await getProductAndInventory(r);
     let afterRow=after.inv.find(x=>String(x.location).toLowerCase()===String(loc).toLowerCase());
     let currentQty=Number(afterRow?.quantity_available||0);
-    if(catalogUpdate?.quantity_available!==undefined) currentQty=Number(catalogUpdate.quantity_available);
-    if(!afterRow && !catalogUpdate?.success){
-      throw new Error(`SellerChamp did not confirm inventory at ${loc}. No inventory change was recorded.`);
+    if(updateMethod==='master_product'){
+      currentQty=Number(catalogUpdate.quantity_available||0);
+      const confirmed=(catalogUpdate.inventory_locations||catalogUpdate.master_product?.inventory_locations||[]).find(x=>String(x.location||'').toLowerCase()===String(loc).toLowerCase());
+      if(!confirmed) throw new Error(`SellerChamp did not return ${loc} in the updated catalog inventory. The return was not completed.`);
+    }else if(!afterRow){
+      throw new Error(`SellerChamp did not return ${loc} after the inventory update. The return was not completed.`);
     }
     r.inventory_result.quantity_available=currentQty;
     writeDb(db);
-    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,inventory_locations:after.inv});
+    res.json({ok:true,marketplace_status:marketplaceStatus,archived:false,product_id:product.id,ebay_url:ebayUrl(refreshed)||r.ebay_url||'',location:loc,quantity_available:currentQty,inventory_locations:updateMethod==='master_product'?(catalogUpdate.inventory_locations||catalogUpdate.master_product?.inventory_locations||[]):after.inv,update_method:updateMethod});
   }catch(e){res.status(500).json({error:e.message});}
 });
 app.post('/api/returns/:id/set-inventory-quantity', async(req,res)=>{
