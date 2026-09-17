@@ -120,14 +120,12 @@ window.showReturn=async id=>{try{const r=(await api('/api/returns/'+id)).return;
   const inv=await api(`/api/returns/${id}/inventory`);
   const rows=inv.inv||[];
   const orderLoc=String(r.location||'').trim();
-  const orderParts=orderLoc.split(/\s*&\s*|\s*,\s*/).filter(Boolean);
-  const orderRows=rows.filter(x=>orderParts.some(loc=>String(x.location||'').toLowerCase()===loc.toLowerCase()));
-  const orderQty=orderRows.reduce((n,x)=>n+Number(x.quantity_available||0),0);
   const currentLocs=rows.filter(x=>String(x.location||'').trim()).map(x=>String(x.location).trim()).join(' & ')||'NO LOCATION';
-  inventory=`<div class="card"><h3 style="font-size:26px;margin-bottom:14px">Current SellerChamp Inventory</h3>
-    <div style="background:#fff3b0;border:3px solid #d39a00;border-radius:14px;padding:15px 16px;font-size:22px;line-height:1.45;font-weight:800">
-      <div><span style="font-weight:900">Order Location:</span> ${esc(orderLoc||'NO LOC')} &nbsp;—&nbsp; <span style="font-weight:900">Quantity On Hand:</span> ${esc(orderQty)}</div>
-      <div style="margin-top:10px"><span style="font-weight:900">Current Location:</span> ${esc(currentLocs)}</div>
+  const totalOnHand=Number(inv.quantity_on_hand||0);
+  inventory=`<div class="card"><h3 style="font-size:23px;margin-bottom:12px">Current SellerChamp Inventory</h3>
+    <div style="background:#fff3b0;border:3px solid #d39a00;border-radius:14px;padding:12px 14px;font-size:17px;line-height:1.35;font-weight:700">
+      <div><b>Order Location:</b> ${esc(orderLoc||'NO LOC')} &nbsp; <b>On Hand:</b> ${esc(totalOnHand)}</div>
+      <div style="margin-top:6px"><b>Current Location:</b> ${esc(currentLocs)}</div>
     </div>
   </div>`;
 }catch(e){inventory=`<div class="card error">${esc(e.message)}</div>`}$('#detail').innerHTML=`<div class="card"><h2>${esc(r.title)}</h2><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front decision:</b> ${esc(r.disposition)}</div></div><h3>Instructions</h3><p>${esc(r.notes||'None')}</p><div class="photos">${r.photos.map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}">Open in SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div></div>${inventory}${processPanel(r)}`;try{

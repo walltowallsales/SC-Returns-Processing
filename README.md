@@ -352,3 +352,9 @@ PDF-only wording/formatting changes:
 
 ## V2-44
 - Opened Process Returns now prominently shows Order Location, quantity on hand at that order location, and Current Location from SellerChamp product inventory locations.
+
+
+## V2-45
+- Fixed Current SellerChamp Inventory so On Hand reports the product's total SellerChamp quantity rather than trying to match quantity to the order-location text.
+- Falls back to the sum of SellerChamp inventory-location quantities if the product record does not expose a total quantity field.
+- Reduced the inventory panel font sizes and spacing so Order Location, On Hand, and Current Location fit much more cleanly on iPhone.

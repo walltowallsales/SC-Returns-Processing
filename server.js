@@ -331,7 +331,15 @@ async function getProductAndInventory(r){
   const inv=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
   return {product,inv};
 }
-app.get('/api/returns/:id/inventory', async(req,res)=>{ try{ const r=readDb().find(x=>x.id===req.params.id); if(!r)return res.status(404).json({error:'Return not found'}); res.json(await getProductAndInventory(r)); }catch(e){res.status(500).json({error:e.message});} });
+app.get('/api/returns/:id/inventory', async(req,res)=>{ try{
+  const r=readDb().find(x=>x.id===req.params.id);
+  if(!r)return res.status(404).json({error:'Return not found'});
+  const data=await getProductAndInventory(r);
+  const locationTotal=(data.inv||[]).reduce((n,x)=>n+Number(x.quantity_available||0),0);
+  const rawTotal=first(data.product,'quantity_on_hand','quantity','inventory_quantity','available_quantity');
+  const quantity_on_hand=(rawTotal!==null && Number.isFinite(Number(rawTotal)))?Number(rawTotal):locationTotal;
+  res.json({...data,quantity_on_hand});
+}catch(e){res.status(500).json({error:e.message});} });
 
 function archiveRecord(r, action, details){
   r.status='archived'; r.archived_at=now(); r.updated_at=now();
