@@ -342,3 +342,10 @@ PDF-only wording/formatting changes:
 - Location now gets its own full-width highlighted row above the photo/order/SKU/title block.
 - `LOCATION:` and the location value appear on the same line whenever possible.
 - Removed aggressive anywhere-wrapping that was splitting `LOCATION` and shelf codes character-by-character.
+
+
+## V2-43
+- Corrected the Process Returns grid layout itself. V2-42 made the location 100% wide inside the first grid column, which is why it still appeared as a narrow left-hand box.
+- Location now explicitly spans every grid column and occupies a true full-width row.
+- Item/photo/details occupy the next full-width row, and action buttons occupy their own row.
+- This prevents location text from overlapping Order, SKU, title, or photos on iPhone.
