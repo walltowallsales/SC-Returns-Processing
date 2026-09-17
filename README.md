@@ -322,3 +322,10 @@ PDF-only wording/formatting changes:
 - The report explicitly shows before → after values for both On Hand and Reserve and whether each matched the expected increase.
 - Both On Hand and Reserve remain editable after the report; `Update Quantities` writes both values to SellerChamp and reports the values SellerChamp returns.
 - A separate `Quantities Are Correct — Complete & Archive` button performs the archive only after review, then opens the editable Signal message.
+
+
+## V2-40
+- Added a prominent `Returns to Process` counter at the top of Tab 2's queue.
+- Made each queue item's location much more prominent with a large highlighted LOCATION placard.
+- Tab 1 disposition labels are now `Return to Inventory`, `Put in Reserve`, and the existing third option remains unchanged.
+- Tab 2 queue tags now display `Return to Inventory` and `Put in Reserve` instead of the internal disposition names.
