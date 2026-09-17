@@ -329,3 +329,9 @@ PDF-only wording/formatting changes:
 - Made each queue item's location much more prominent with a large highlighted LOCATION placard.
 - Tab 1 disposition labels are now `Return to Inventory`, `Put in Reserve`, and the existing third option remains unchanged.
 - Tab 2 queue tags now display `Return to Inventory` and `Put in Reserve` instead of the internal disposition names.
+
+
+## V2-41
+- Fixed the oversized Process Returns location placards on iPhone.
+- Location is now a compact highlighted block above the item details instead of a large box competing with/overlapping the order text.
+- Long/multiple locations wrap inside the placard, and the item content is forced below it.
