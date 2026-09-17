@@ -180,7 +180,7 @@ window.archiveActive=async (id,sku='')=>{
     const j=await api(`/api/returns/${id}/archive-active`,{method:'POST'});
     sku=sku||j.sku||'';
     $('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'});
-    showSignalMessage(`SKU-${sku} -- Loc-${loc} -- ${title} -- `);
+    showSignalMessage(await buildSignalText(id,sku,loc,title));
   }catch(e){$('#processMsg').textContent=e.message}
 };
 window.activateAndArchive=async (id,sku='')=>{
@@ -191,9 +191,18 @@ window.activateAndArchive=async (id,sku='')=>{
     const j=await api(`/api/returns/${id}/relist-and-archive`,{method:'POST'});
     sku=sku||j.sku||'';
     $('#detail').innerHTML=''; await loadQueue(); window.scrollTo({top:0,behavior:'smooth'});
-    showSignalMessage(`SKU-${sku} -- Loc-${loc} -- ${title} -- `);
+    showSignalMessage(await buildSignalText(id,sku,loc,title));
   }catch(e){$('#processMsg').textContent=e.message}
 };
+
+async function buildSignalText(id,sku,loc,title){
+  let qty='';
+  try{
+    const inv=await api(`/api/returns/${id}/inventory`);
+    qty=(inv.quantity_on_hand!==undefined&&inv.quantity_on_hand!==null)?inv.quantity_on_hand:'';
+  }catch(e){}
+  return `SKU- ${sku||''}\nLocation- ${loc||''}\n${title||''}\nQuantity on hand - ${qty}\n\n`;
+}
 
 function showSignalMessage(message){
   const existing=document.getElementById('signalComposeOverlay');
@@ -271,7 +280,7 @@ window.completeReserveArchive=async (id,loc)=>{
   try{
     const j=await api(`/api/returns/${id}/archive-reserve`,{method:'POST'});
     $('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'});
-    showSignalMessage(`SKU-${j.sku||''} -- Loc-${j.location||loc||''} -- ${j.title||''} -- `);
+    showSignalMessage(await buildSignalText(id,j.sku||'',j.location||loc||'',j.title||''));
   }catch(e){$('#processMsg').textContent=e.message}
 };
 window.doDuplicate=async id=>{if(!confirm('This will create and auto-submit a new SellerChamp/eBay listing. Continue?'))return;try{await api(`/api/returns/${id}/duplicate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sku:$('#newSku').value,title:$('#newTitle').value,item_condition:$('#newCondition').value,item_remarks:$('#newRemarks').value,location:$('#newLoc').value,qty:$('#newQty').value,retail_price:$('#newPrice').value})});alert('New listing submitted. This return has been archived.');$('#detail').innerHTML='';await loadQueue();window.scrollTo({top:0,behavior:'smooth'})}catch(e){$('#processMsg').textContent=e.message}};

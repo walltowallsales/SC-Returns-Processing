@@ -358,3 +358,9 @@ PDF-only wording/formatting changes:
 - Fixed Current SellerChamp Inventory so On Hand reports the product's total SellerChamp quantity rather than trying to match quantity to the order-location text.
 - Falls back to the sum of SellerChamp inventory-location quantities if the product record does not expose a total quantity field.
 - Reduced the inventory panel font sizes and spacing so Order Location, On Hand, and Current Location fit much more cleanly on iPhone.
+
+
+## V2-46
+- Signal draft format changed to four lines: SKU, Location, Product Title, and exact current Quantity on hand.
+- Adds two newline characters after Quantity on hand so there is one blank line before the user's added message.
+- Archive workflows fetch current SellerChamp inventory immediately before building the editable Signal draft.
