@@ -349,3 +349,6 @@ PDF-only wording/formatting changes:
 - Location now explicitly spans every grid column and occupies a true full-width row.
 - Item/photo/details occupy the next full-width row, and action buttons occupy their own row.
 - This prevents location text from overlapping Order, SKU, title, or photos on iPhone.
+
+## V2-44
+- Opened Process Returns now prominently shows Order Location, quantity on hand at that order location, and Current Location from SellerChamp product inventory locations.
