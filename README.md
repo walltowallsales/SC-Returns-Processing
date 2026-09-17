@@ -335,3 +335,10 @@ PDF-only wording/formatting changes:
 - Fixed the oversized Process Returns location placards on iPhone.
 - Location is now a compact highlighted block above the item details instead of a large box competing with/overlapping the order text.
 - Long/multiple locations wrap inside the placard, and the item content is forced below it.
+
+
+## V2-42
+- Reworked the Process Returns location display for narrow iPhone screens.
+- Location now gets its own full-width highlighted row above the photo/order/SKU/title block.
+- `LOCATION:` and the location value appear on the same line whenever possible.
+- Removed aggressive anywhere-wrapping that was splitting `LOCATION` and shelf codes character-by-character.
