@@ -364,3 +364,9 @@ PDF-only wording/formatting changes:
 - Signal draft format changed to four lines: SKU, Location, Product Title, and exact current Quantity on hand.
 - Adds two newline characters after Quantity on hand so there is one blank line before the user's added message.
 - Archive workflows fetch current SellerChamp inventory immediately before building the editable Signal draft.
+
+
+## V2-47
+- Signal draft has a hyphen at the beginning of lines 1 through 4.
+- Line 5 remains blank and line 6 begins with a hyphen ready for typing.
+- Tab 2 Process Returns items now have a thick dark divider with extra spacing between records.
