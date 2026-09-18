@@ -122,10 +122,13 @@ window.showReturn=async id=>{try{const r=(await api('/api/returns/'+id)).return;
   const orderLoc=String(r.location||'').trim();
   const currentLocs=rows.filter(x=>String(x.location||'').trim()).map(x=>String(x.location).trim()).join(' & ')||'NO LOCATION';
   const totalOnHand=Number(inv.quantity_on_hand||0);
+  const currentReserve=Number(inv.product?.reserve_quantity||0);
   inventory=`<div class="card"><h3 style="font-size:23px;margin-bottom:12px">Current SellerChamp Inventory</h3>
     <div style="background:#fff3b0;border:3px solid #d39a00;border-radius:14px;padding:12px 14px;font-size:17px;line-height:1.35;font-weight:700">
-      <div><b>Order Location:</b> ${esc(orderLoc||'NO LOC')} &nbsp; <b>On Hand:</b> ${esc(totalOnHand)}</div>
+      <div><b>Order Location:</b> ${esc(orderLoc||'NO LOC')}</div>
+      <div style="margin-top:6px"><b>On Hand:</b> ${esc(totalOnHand)}</div>
       <div style="margin-top:6px"><b>Current Location:</b> ${esc(currentLocs)}</div>
+      <div style="margin-top:6px"><b>Current Quantity in Reserve:</b> ${esc(currentReserve)}</div>
     </div>
   </div>`;
 }catch(e){inventory=`<div class="card error">${esc(e.message)}</div>`}$('#detail').innerHTML=`<div class="card"><h2>${esc(r.title)}</h2><div class="meta"><div><b>Order:</b> ${esc(r.order_number)}</div><div><b>SKU:</b> ${esc(r.sku)}</div><div><b>Qty:</b> ${esc(r.returned_qty)}</div><div><b>Location:</b> ${esc(r.location)}</div><div><b>Observed:</b> ${esc(r.observed_condition)}</div><div><b>Front decision:</b> ${esc(r.disposition)}</div></div><h3>Instructions</h3><p>${esc(r.notes||'None')}</p><div class="photos">${r.photos.map(p=>`<img src="${esc(p)}">`).join('')}</div><div class="links"><a class="pdf-button" target="_blank" href="/api/returns/${r.id}/pdf">Open / Print PDF</a>${r.sellerchamp_url?`<a target="_blank" href="${esc(r.sellerchamp_url)}">Open in SellerChamp</a>`:''}${r.ebay_url?`<a target="_blank" href="${esc(r.ebay_url)}">eBay</a>`:''}</div></div>${inventory}${processPanel(r)}`;try{
@@ -245,7 +248,7 @@ window.doReserve=id=>{
       $('#processMsg').textContent='Adding inventory, updating reserve, and checking SellerChamp…';
       const j=await api(`/api/returns/${id}/add-reserve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:loc,reserve_location:$('#reserveNote').value,qty})});
       const onMsg=j.on_hand_verified?'CONFIRMED':'CHECK NEEDED';
-      const resMsg=j.reserve_verified?'CONFIRMED':'CHECK NEEDED';
+      const resMsg=j.reserve_verified?'CONFIRMED':'NOT YET VERIFIED';
       $('#processMsg').innerHTML=`<div class="listing-warning"><b>SellerChamp update completed. Review before archiving.</b><br><br>
         <b>Quantity added:</b> ${esc(j.quantity_added)}<br>
         <b>On hand:</b> ${esc(j.before_on_hand)} → <b>${esc(j.quantity_available)}</b> &nbsp; <b>${onMsg}</b><br>

@@ -370,3 +370,10 @@ PDF-only wording/formatting changes:
 - Signal draft has a hyphen at the beginning of lines 1 through 4.
 - Line 5 remains blank and line 6 begins with a hyphen ready for typing.
 - Tab 2 Process Returns items now have a thick dark divider with extra spacing between records.
+
+
+## V2-48
+- Add + Reserve verification now waits/polls SellerChamp at roughly 3, 6, and 10 seconds, stopping early once both on-hand and reserve match the expected values.
+- If reserve still has not propagated after the final check, the review says `NOT YET VERIFIED` rather than implying failure.
+- Current SellerChamp Inventory formatting now puts Order Location and On Hand on separate lines.
+- Added `Current Quantity in Reserve` below Current Location.

@@ -493,12 +493,19 @@ app.post('/api/returns/:id/add-reserve', async(req,res)=>{
     await addAtLocation(product,inv,loc,qty);
     const requestedReserve=beforeReserve+qty;
     await sc(`/api/products/${product.id}`,{method:'PUT',body:JSON.stringify({product:{reserve_quantity:requestedReserve,reserve_quantity_location:req.body.reserve_location||loc}})});
-    const verified=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
-    const row=verified.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
-    const onHand=Number(row?.quantity_available||0);
-    const verifiedProduct=await freshProduct(product.id);
-    const verifiedReserve=Number(verifiedProduct?.reserve_quantity||0);
     const expectedOnHand=beforeOnHand+qty, expectedReserve=beforeReserve+qty;
+    let verified=[], row=null, onHand=0, verifiedProduct=null, verifiedReserve=0;
+    // SellerChamp can accept the reserve update before its read API reflects it.
+    // Poll briefly so the review screen reports the settled values when possible.
+    for(const delay of [3000,3000,4000]){
+      await sleep(delay);
+      verified=(await sc(`/api/products/${product.id}/inventory_locations`)).inventory_locations||[];
+      row=verified.find(x=>String(x.location||'').toLowerCase()===String(loc||'').toLowerCase());
+      onHand=Number(row?.quantity_available||0);
+      verifiedProduct=await freshProduct(product.id);
+      verifiedReserve=Number(verifiedProduct?.reserve_quantity||0);
+      if(onHand===expectedOnHand && verifiedReserve===expectedReserve) break;
+    }
     r.status='reserve_added_pending_review'; r.updated_at=now(); r.reserve_result={location:loc,quantity_added:qty,before_on_hand:beforeOnHand,quantity_available:onHand,before_reserve:beforeReserve,reserve_quantity:verifiedReserve,expected_on_hand:expectedOnHand,expected_reserve:expectedReserve};
     r.history=r.history||[]; r.history.push({at:now(),action:'reserve_added_pending_review',details:`Added ${qty} at ${loc}. On hand ${beforeOnHand} → ${onHand}; reserve ${beforeReserve} → ${verifiedReserve}. Awaiting quantity review.`});
     writeDb(db);
